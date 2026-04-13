@@ -5,15 +5,72 @@ on:
     tags:
       - 'v*.*'
 
+permissions:
+  packages: read
+  contents: write
+
 jobs:
   release:
-    uses: start9labs/shared-workflows/.github/workflows/release.yml@master
-    with:
-      RELEASE_REGISTRY: ${{ vars.REGISTRY }}
-      S3_S9PKS_BASE_URL: ${{ vars.S3_S9PKS_BASE_URL }}
-    secrets:
-      DEV_KEY: ${{ secrets.DEV_KEY }}
-      S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
-      S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
-    permissions:
-      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup build environment
+        uses: start9labs/shared-workflows/.github/actions/setup-build-env@master
+
+      - name: Checkout services repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up developer signing key
+        run: |
+          mkdir -p ~/.startos
+          printf '%s' "${{ secrets.DEV_KEY }}" > ~/.startos/developer.key.pem
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the service packages
+        id: build
+        run: |
+          RUST_LOG=debug RUST_BACKTRACE=1 make
+          echo ""
+          echo "SHA256SUMs:"
+          sha256sum *.s9pk
+
+      - name: Extract version
+        id: version
+        uses: start9labs/shared-workflows/.github/actions/extract-version@master
+
+      - name: Generate changelog
+        run: |
+          FIRST_S9PK=$(ls *.s9pk | head -1)
+          RELEASE_NOTES=$(start-cli s9pk inspect "$FIRST_S9PK" manifest | jq -r '.releaseNotes | if type == "object" then (.["en-US"] // first(.[]) // "") else . end')
+          echo "## What's Changed" > change-log.txt
+          echo "" >> change-log.txt
+          echo "${RELEASE_NOTES}" >> change-log.txt
+          echo "" >> change-log.txt
+          echo "## SHA256 Hashes" >> change-log.txt
+          echo '```' >> change-log.txt
+          sha256sum *.s9pk >> change-log.txt
+          echo '```' >> change-log.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ steps.version.outputs.version }}
+          prerelease: true
+          body_path: change-log.txt
+          files: ./*.s9pk
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-output
+          path: ./*.s9pk
+          compression-level: 0
+          retention-days: 1
