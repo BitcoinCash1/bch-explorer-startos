@@ -6,7 +6,7 @@ export const setDependencies = sdk.setupDependencies(
       'bitcoin-cash-node': {
         kind: 'running' as const,
         versionRange: '>=29.0.0:0',
-        healthChecks: ['rpc'],
+        healthChecks: ['primary'],
       },
     }
   },
