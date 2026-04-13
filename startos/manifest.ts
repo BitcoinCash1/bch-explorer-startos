@@ -21,17 +21,20 @@ export const manifest = setupManifest({
     frontend: {
       source: {
         dockerTag:
-          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.7',
+          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.7.8',
       },
+      arch: ['x86_64'],
     },
     backend: {
       source: {
         dockerTag:
-          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.7',
+          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.7.8',
       },
+      arch: ['x86_64'],
     },
     db: {
-      source: { dockerTag: 'mariadb:12.2.1' },
+      source: { dockerTag: 'mariadb:10.4.32' },
+      arch: ['x86_64'],
     },
   },
   alerts: {
