@@ -45,7 +45,10 @@ jobs:
           echo "backend_tag=ghcr.io/cyberashven/bch-explorer-backend:$SHA" >> $GITHUB_OUTPUT
 
       - name: Prepare Docker build contexts (copy Dockerfiles into source dirs)
-        run: cd bch-explorer-src && sh docker/init.sh
+        run: |
+          cd bch-explorer-src && sh docker/init.sh && cd ..
+          cp .github/dockerfiles/backend.Dockerfile bch-explorer-src/backend/Dockerfile
+          cp .github/dockerfiles/frontend.Dockerfile bch-explorer-src/frontend/Dockerfile
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
