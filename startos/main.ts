@@ -11,10 +11,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
   const dbPassword = store?.dbPassword ?? 'explorer'
 
   // Always connect to Fulcrum BCH for Electrum indexing
-  const fulcrumIp = await sdk
-    .getContainerIp(effects, { packageId: 'fulcrum-bch' })
-    .once()
-  const electrumHost = fulcrumIp ?? ''
+  const electrumHost = 'fulcrum-bch.startos'
 
   // Create the API subcontainer first so we can exec into it to read BCHN credentials
   // (the dependency volume is only accessible inside the subcontainer, not in the Node.js process)
