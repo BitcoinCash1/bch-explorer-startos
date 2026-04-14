@@ -48,3 +48,42 @@ $(PACKAGE_ID)_%.s9pk: $(INGREDIENTS) .git/HEAD .git/index
 
 ingredients: $(INGREDIENTS)
 	@echo "   Re-evaluating ingredients..."
+
+install: | check-deps check-init
+	@HOST=$$(awk -F'/' '/^host:/ {print $$3}' ~/.startos/config.yaml); \
+	if [ -z "$$HOST" ]; then \
+		echo "Error: You must define \"host: http://server-name.local\" in ~/.startos/config.yaml"; \
+		exit 1; \
+	fi; \
+	S9PK=$$(ls -t *.s9pk 2>/dev/null | head -1); \
+	if [ -z "$$S9PK" ]; then \
+		echo "Error: No .s9pk file found. Run 'make' first."; \
+		exit 1; \
+	fi; \
+	printf "\n🚀 Installing %s to %s ...\n" "$$S9PK" "$$HOST"; \
+	start-cli package install -s "$$S9PK"
+
+check-deps:
+	@command -v start-cli >/dev/null || \
+		(echo "Error: start-cli not found. Please see https://docs.start9.com/latest/developer-guide/sdk/installing-the-sdk" && exit 1)
+	@command -v npm >/dev/null || \
+		(echo "Error: npm not found. Please install Node.js and npm." && exit 1)
+
+check-init:
+	@if [ ! -f ~/.startos/developer.key.pem ]; then \
+		echo "Initializing StartOS developer environment..."; \
+		start-cli init-key; \
+	fi
+
+javascript/index.js: $(shell find startos -type f) tsconfig.json node_modules
+	npm run build
+
+node_modules: package-lock.json
+	npm ci
+
+package-lock.json: package.json
+	npm i
+
+clean:
+	@echo "Cleaning up build artifacts..."
+	@rm -rf $(PACKAGE_ID).s9pk $(PACKAGE_ID)_x86_64.s9pk $(PACKAGE_ID)_aarch64.s9pk $(PACKAGE_ID)_riscv64.s9pk javascript node_modules
