@@ -3,19 +3,15 @@ import { webPort, dbPort } from './utils'
 import { storeJson } from './file-models/store.json'
 
 export const main = sdk.setupMain(async ({ effects }) => {
-  // Read store for DB credentials and indexer selection
+  // Read store for DB credentials
   const store = await storeJson.read().once()
   const dbPassword = store?.dbPassword ?? 'explorer'
-  const indexer = store?.indexer ?? 'fulcrum'
 
-  // Only try to reach Fulcrum if selected (default on fresh install)
-  let electrumHost = ''
-  if (indexer === 'fulcrum') {
-    const fulcrumIp = await sdk
-      .getContainerIp(effects, { packageId: 'fulcrum-bch' })
-      .once()
-    electrumHost = fulcrumIp ?? ''
-  }
+  // Always connect to Fulcrum BCH for Electrum indexing
+  const fulcrumIp = await sdk
+    .getContainerIp(effects, { packageId: 'fulcrum-bch' })
+    .once()
+  const electrumHost = fulcrumIp ?? ''
 
   // Create the API subcontainer first so we can exec into it to read BCHN credentials
   // (the dependency volume is only accessible inside the subcontainer, not in the Node.js process)
@@ -94,16 +90,15 @@ export const main = sdk.setupMain(async ({ effects }) => {
       exec: {
         command: ['./start.sh'],
         env: {
-          EXPLORER_BACKEND: electrumHost ? 'electrum' : 'node',
+          EXPLORER_BACKEND: 'electrum',
           EXPLORER_NETWORK: 'mainnet',
           EXPLORER_INDEXING_BLOCKS_AMOUNT: '-1',
           CORE_RPC_HOST: 'bitcoin-cash-node.startos',
           CORE_RPC_PORT: '8332',
           CORE_RPC_USERNAME: bchnUser,
           CORE_RPC_PASSWORD: bchnPass,
-          ...(electrumHost
-            ? { ELECTRUM_HOST: electrumHost, ELECTRUM_PORT: '50001' }
-            : {}),
+          ELECTRUM_HOST: electrumHost,
+          ELECTRUM_PORT: '50001',
           DATABASE_ENABLED: 'true',
           DATABASE_HOST: '127.0.0.1',
           DATABASE_PORT: String(dbPort),

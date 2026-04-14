@@ -9,8 +9,7 @@ const indexerInputSpec = InputSpec.of({
     description:
       'Select which Electrum server to use for address lookups',
     values: {
-      fulcrum: 'Fulcrum (recommended)',
-      node: 'None (node only)',
+      fulcrum: 'Fulcrum BCH (recommended)',
     },
     default: 'fulcrum',
   }),
@@ -40,6 +39,6 @@ export const selectIndexer = sdk.Action.withInput(
 
   async ({ effects, input }) =>
     storeJson.merge(effects, {
-      indexer: input.indexer as 'fulcrum' | 'node',
+      indexer: input.indexer as 'fulcrum',
     }),
 )

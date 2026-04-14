@@ -58,8 +58,8 @@ export const manifest = setupManifest({
     },
     'fulcrum-bch': {
       description:
-        'Fulcrum BCH provides the Electrum index for richer transaction history. Highly recommended.',
-      optional: true,
+        'Fulcrum BCH provides the Electrum index required for address lookups and transaction history.',
+      optional: false,
       metadata: {
         title: 'Fulcrum BCH',
         icon: 'https://raw.githubusercontent.com/CyberAshven/fulcrum-bch-startos/master/icon.png',
