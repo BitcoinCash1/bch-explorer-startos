@@ -144,21 +144,6 @@ Contributions are welcome. Please open an issue or pull request on the [GitHub r
 
 For build instructions, see the [Makefile](Makefile) and [s9pk.mk](s9pk.mk).
 ---
-## Architecture Support
-
-Currently x86_64 only. To add aarch64 (ARM) support in the future:
-
-1. Build multi-arch Docker images:
-  ```bash
-  docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/cyberashven/bch-explorer-frontend:3.7.10 .
-  docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/cyberashven/bch-explorer-backend:3.7.10 .
-  ```
-
-2. Update `startos/manifest.ts` image arch fields:
-  ```typescript
-  arch: ['x86_64', 'aarch64'],
-  ```
----
 
 ## Quick Reference for AI Consumers
 
