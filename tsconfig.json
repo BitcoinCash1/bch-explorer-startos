@@ -1,16 +1,11 @@
 {
+  "include": ["startos/**/*.ts", "node_modules/**/startos"],
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["ES2020"],
-    "strict": true,
+    "target": "ES2018",
+    "module": "CommonJS",
+    "moduleResolution": "node",
     "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "./javascript",
-    "rootDir": "./startos",
-    "resolveJsonModule": true
-  },
-  "include": ["startos/**/*"],
-  "exclude": ["node_modules", "javascript"]
+    "strict": true,
+    "skipLibCheck": true
+  }
 }
