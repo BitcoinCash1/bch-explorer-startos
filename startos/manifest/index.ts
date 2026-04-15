@@ -33,6 +33,7 @@ export const manifest = setupManifest({
     db: {
       source: { dockerTag: 'mariadb:11.3' },
       arch: ['x86_64', 'aarch64'],
+      emulateMissingAs: 'x86_64',
     },
   },
   alerts: {
