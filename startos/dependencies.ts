@@ -13,12 +13,10 @@ export const setDependencies = sdk.setupDependencies(async ({ effects }) => {
         kind: 'partial',
         value: {
           prune: 0,
-          txindex: true,
-          zmqEnabled: false,
         },
       },
       reason:
-        'Pruning must be disabled and txindex must be enabled for BCH Explorer to function properly.',
+        'Pruning must be disabled for BCH Explorer to function properly.',
       when: { condition: 'input-not-matches', once: false },
     })
   } else {
