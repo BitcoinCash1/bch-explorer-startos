@@ -19,6 +19,7 @@ export const seedFiles = sdk.setupOnInit(async (effects, kind) => {
   await storeJson.merge(effects, {
     dbPassword,
     initialized: true,
+    nodePackageId: 'bitcoincashd',
     indexer: null,
   })
 })

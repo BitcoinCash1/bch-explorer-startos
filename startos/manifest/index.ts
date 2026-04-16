@@ -18,20 +18,22 @@ export const manifest = setupManifest({
   images: {
     frontend: {
       source: {
-        dockerTag: 'ghcr.io/bitcoincash1/bch-explorer-frontend:3.7.10',
+        dockerTag:
+          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.3',
       },
       arch: ['x86_64'],
       emulateMissingAs: 'x86_64',
     },
     backend: {
       source: {
-        dockerTag: 'ghcr.io/bitcoincash1/bch-explorer-backend:3.7.10',
+        dockerTag:
+          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.3',
       },
       arch: ['x86_64'],
       emulateMissingAs: 'x86_64',
     },
     db: {
-      source: { dockerTag: 'mariadb:11.3' },
+      source: { dockerTag: 'mariadb:11.4' },
       arch: ['x86_64', 'aarch64'],
       emulateMissingAs: 'x86_64',
     },
@@ -47,7 +49,7 @@ export const manifest = setupManifest({
     stop: null,
   },
   dependencies: {
-    'bitcoin-cash-node': {
+    bitcoincashd: {
       description:
         'Bitcoin Cash Node is required to provide blockchain RPC data to the explorer.',
       optional: false,

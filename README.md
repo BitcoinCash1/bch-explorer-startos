@@ -55,30 +55,37 @@ StartOS-specific files:
 
 | File           | Volume | Purpose                                      |
 | -------------- | ------ | -------------------------------------------- |
-| `store.json`   | `main` | StartOS state (database credentials)         |
+| `store.json`   | `main` | StartOS state (database credentials + selected node package) |
 
 ## Installation and First-Run Flow
 
-1. **Ensure Bitcoin Cash Node is installed** and fully synced
+1. **Ensure a BCH node package is installed** (default: `bitcoincashd`) and fully synced
 2. Install BCH Explorer from the StartOS marketplace
 3. Wait for Bitcoin Cash Node to finish syncing
-4. BCH Explorer will automatically connect to Bitcoin Cash Node via RPC
+4. BCH Explorer will automatically connect to the selected BCH node package via RPC
 5. Optionally install Fulcrum BCH for richer address and transaction lookups
 
 **Uninstall alert:** Uninstalling BCH Explorer will permanently delete all cached explorer data and the database.
 
 ## Configuration Management
 
-BCH Explorer is configured automatically by StartOS — no manual configuration is needed.
+BCH Explorer is configured automatically by StartOS.
+
+### Node Backend Selection
+
+Use **Actions -> Select Node Backend** to choose which StartOS package ID provides BCH RPC data.
+
+- Default: `bitcoincashd`
+- You can switch to any compatible BCH node package ID in the future without changing explorer internals
 
 ### Auto-Configured by StartOS
 
 | Setting              | Value                        | Purpose                    |
 | -------------------- | ---------------------------- | -------------------------- |
-| `CORE_RPC_HOST`      | `bitcoin-cash-node.startos`  | Bitcoin Cash Node RPC host |
-| `CORE_RPC_PORT`      | `8332`                       | Bitcoin Cash Node RPC port |
-| `CORE_RPC_USERNAME`  | From BCHN `store.json`       | RPC authentication         |
-| `CORE_RPC_PASSWORD`  | From BCHN `store.json`       | RPC authentication         |
+| `CORE_RPC_HOST`      | `<selected-node>.startos`    | Selected BCH node RPC host |
+| `CORE_RPC_PORT`      | `8332`                       | Selected BCH node RPC port |
+| `CORE_RPC_USERNAME`  | From selected node `store.json` | RPC authentication      |
+| `CORE_RPC_PASSWORD`  | From selected node `store.json` | RPC authentication      |
 | `DATABASE_HOST`      | `127.0.0.1`                  | MariaDB connection         |
 | `DATABASE_PORT`      | `3306`                       | MariaDB port               |
 | `DATABASE_DATABASE`  | `explorer`                   | Database name              |
@@ -116,10 +123,10 @@ The backend API runs on port 8999 internally but is not exposed as a separate in
 
 | Dependency         | Required | Purpose                                     | Auto-Config             |
 | ------------------ | -------- | ------------------------------------------- | ----------------------- |
-| Bitcoin Cash Node  | Yes      | Blockchain data via RPC                     | RPC credentials from `store.json` |
+| BCH Node Backend (`bitcoincashd` by default) | Yes | Blockchain data via RPC | RPC credentials from selected node `store.json` |
 | Fulcrum BCH        | No       | Electrum index for address/transaction lookups | Connects automatically  |
 
-Bitcoin Cash Node must be running with version ≥ 29.0.0 and passing its primary health check.
+Selected node backend must be running with version ≥ 29.0.0 and passing its primary health check.
 
 ## Limitations and Differences
 
@@ -165,7 +172,7 @@ ports:
   api: 8999 (internal)
   db: 3306 (internal)
 dependencies:
-  - bitcoin-cash-node (required, version >=29.0.0:0)
+  - bitcoincashd (required default, version >=29.0.0:0; overridable via Select Node Backend action)
   - fulcrum-bch (optional, electrum index)
 health_checks:
   - db: port_listening 3306

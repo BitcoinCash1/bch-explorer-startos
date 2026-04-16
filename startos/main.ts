@@ -1,14 +1,15 @@
 import { sdk } from './sdk'
 import { webPort, dbPort } from './utils'
 import { storeJson } from './file-models/store.json'
-import { manifest as bchnManifest } from 'bitcoin-cash-node-startos/startos/manifest'
 
 export const main = sdk.setupMain(async ({ effects }) => {
   console.log('Starting BCH Explorer!')
 
-  // Read store for DB credentials
+  // Read store for DB credentials and selected node package
   const store = await storeJson.read().once()
   const dbPassword = store?.dbPassword ?? 'explorer'
+  const nodePackageId = store?.nodePackageId ?? 'bitcoincashd'
+  const nodeHost = `${nodePackageId}.startos`
 
   // Always connect to Fulcrum BCH for Electrum indexing
   const electrumHost = 'fulcrum-bch.startos'
@@ -25,31 +26,31 @@ export const main = sdk.setupMain(async ({ effects }) => {
         mountpoint: '/backend/cache',
         readonly: false,
       })
-      .mountDependency<typeof bchnManifest>({
-        dependencyId: 'bitcoin-cash-node',
+      .mountDependency({
+        dependencyId: nodePackageId,
         volumeId: 'main',
         subpath: null,
-        mountpoint: '/mnt/bitcoin-cash-node',
+        mountpoint: '/mnt/node',
         readonly: true,
       }),
     'api-sub',
   )
 
-  // Read BCHN RPC credentials from the mounted dependency volume inside the subcontainer
-  let bchnUser = 'bitcoin-cash-node'
-  let bchnPass = ''
+  // Read node RPC credentials from the mounted dependency volume inside the subcontainer
+  let nodeUser = nodePackageId
+  let nodePass = ''
   try {
-    const result = await apiSub.exec(['cat', '/mnt/bitcoin-cash-node/store.json'])
+    const result = await apiSub.exec(['cat', '/mnt/node/store.json'])
     if (result.exitCode === 0) {
-      const bchnStore = JSON.parse(result.stdout.toString()) as {
+      const nodeStore = JSON.parse(result.stdout.toString()) as {
         rpcUser?: string
         rpcPassword?: string
       }
-      bchnUser = bchnStore.rpcUser ?? bchnUser
-      bchnPass = bchnStore.rpcPassword ?? bchnPass
+      nodeUser = nodeStore.rpcUser ?? nodeUser
+      nodePass = nodeStore.rpcPassword ?? nodePass
     }
   } catch {
-    console.warn('Could not read BCHN store.json — using defaults')
+    console.warn('Could not read node store.json — using defaults')
   }
 
   return sdk.Daemons.of(effects)
@@ -93,10 +94,10 @@ export const main = sdk.setupMain(async ({ effects }) => {
           EXPLORER_BACKEND: 'electrum',
           EXPLORER_NETWORK: 'mainnet',
           EXPLORER_INDEXING_BLOCKS_AMOUNT: '-1',
-          CORE_RPC_HOST: 'bitcoin-cash-node.startos',
+          CORE_RPC_HOST: nodeHost,
           CORE_RPC_PORT: '8332',
-          CORE_RPC_USERNAME: bchnUser,
-          CORE_RPC_PASSWORD: bchnPass,
+          CORE_RPC_USERNAME: nodeUser,
+          CORE_RPC_PASSWORD: nodePass,
           ELECTRUM_HOST: electrumHost,
           ELECTRUM_PORT: '50001',
           DATABASE_ENABLED: 'true',
@@ -126,7 +127,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         'web-sub',
       ),
       exec: {
-        // v3.7.10 fixes all entrypoint issues (port typo, dirname, config.template.js)
+        // v3.8.3 upstream images from registry.melroy.org
         command: sdk.useEntrypoint(),
         env: {
           // Entrypoint maps these to nginx config sed replacements

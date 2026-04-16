@@ -6,6 +6,7 @@ import { actions } from '../actions'
 import { restoreInit } from '../backups'
 import { seedFiles } from './seedFiles'
 import { taskSelectIndexer } from './taskSelectIndexer'
+import { taskSelectNode } from './taskSelectNode'
 
 export const init = sdk.setupInit(
   restoreInit,
@@ -14,6 +15,7 @@ export const init = sdk.setupInit(
   setInterfaces,
   setDependencies,
   actions,
+  taskSelectNode,
   taskSelectIndexer,
 )
 
