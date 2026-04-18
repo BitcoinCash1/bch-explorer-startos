@@ -67,6 +67,15 @@ export const manifest = setupManifest({
         icon: 'https://raw.githubusercontent.com/BitcoinCash1/bitcoin-cash-daemon-startos/master/icon.png',
       },
     },
+    flowee: {
+      description:
+        'Flowee the Hub — Fast BCH validator with SPV-level security. An alternative node for providing RPC data.',
+      optional: true,
+      metadata: {
+        title: 'Flowee the Hub',
+        icon: 'https://raw.githubusercontent.com/BitcoinCash1/flowee-startos/master/icon.png',
+      },
+    },
     'fulcrum-bch': {
       description:
         'Fulcrum BCH provides the Electrum index required for address lookups and transaction history.',

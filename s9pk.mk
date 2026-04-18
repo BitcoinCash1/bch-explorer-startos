@@ -6,9 +6,9 @@ INGREDIENTS := $(shell start-cli s9pk list-ingredients 2>/dev/null)
 ARCHES ?= x86 arm riscv
 TARGETS ?= arches
 ifdef VARIANT
-BASE_NAME := $(PACKAGE_ID)_$(VARIANT)
+BASE_NAME ?= $(PACKAGE_ID)_$(VARIANT)
 else
-BASE_NAME := $(PACKAGE_ID)
+BASE_NAME ?= $(PACKAGE_ID)
 endif
 
 .PHONY: all arches aarch64 x86_64 riscv64 arm arm64 x86 riscv arch/* clean install check-deps check-init package ingredients
@@ -114,6 +114,7 @@ check-init:
 	fi
 
 javascript/index.js: $(shell find startos -type f) tsconfig.json node_modules
+	npm run check
 	npm run build
 
 node_modules: package-lock.json
