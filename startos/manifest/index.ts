@@ -73,7 +73,7 @@ export const manifest = setupManifest({
       optional: true,
       metadata: {
         title: 'Flowee the Hub',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/flowee-startos/master/icon.png',
+        icon: 'https://raw.githubusercontent.com/BitcoinCash1/flowee-the-hub-startos/master/icon.png',
       },
     },
     'fulcrum-bch': {
