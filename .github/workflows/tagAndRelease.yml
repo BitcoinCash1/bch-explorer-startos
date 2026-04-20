@@ -40,7 +40,7 @@ jobs:
 
           UPSTREAM_DIR=/tmp/bitcoin-cash-explorer-upstream
           rm -rf "$UPSTREAM_DIR"
-          git clone --depth 1 --branch 3.8.12 https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer.git "$UPSTREAM_DIR"
+          git clone --depth 1 --branch 3.8.12 https://github.com/BitcoinCash1/bitcoin-cash-explorer.git "$UPSTREAM_DIR"
 
           # Prepare upstream frontend/backend directories the same way upstream Docker CI does.
           (cd "$UPSTREAM_DIR" && ./docker/init.sh 3.8.12)
