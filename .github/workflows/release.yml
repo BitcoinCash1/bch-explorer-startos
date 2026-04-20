@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - '3.8.12'
+      - '3.8.13'
 
 jobs:
   release:

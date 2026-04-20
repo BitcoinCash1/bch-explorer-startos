@@ -127,7 +127,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
         'web-sub',
       ),
       exec: {
-        // v3.8.12 upstream images from registry.melroy.org
+        // v3.8.13 upstream images from registry.melroy.org
         command: sdk.useEntrypoint(),
         env: {
           // Entrypoint maps these to nginx config sed replacements

@@ -40,10 +40,10 @@ jobs:
 
           UPSTREAM_DIR=/tmp/bitcoin-cash-explorer-upstream
           rm -rf "$UPSTREAM_DIR"
-          git clone --depth 1 --branch 3.8.12 https://github.com/BitcoinCash1/bitcoin-cash-explorer.git "$UPSTREAM_DIR"
+          git clone --depth 1 --branch 3.8.13 https://github.com/BitcoinCash1/bitcoin-cash-explorer.git "$UPSTREAM_DIR"
 
           # Prepare upstream frontend/backend directories the same way upstream Docker CI does.
-          (cd "$UPSTREAM_DIR" && ./docker/init.sh 3.8.12)
+          (cd "$UPSTREAM_DIR" && ./docker/init.sh 3.8.13)
 
           cat > "$UPSTREAM_DIR/docker/frontend/Dockerfile.startos" <<'EOF'
           FROM node:24-bookworm AS builder
@@ -52,6 +52,7 @@ jobs:
           ENV DOCKER_COMMIT_HASH=${commitHash}
           ENV CYPRESS_INSTALL_BINARY=0
           ENV NODE_ENV=production
+          ENV SKIP_SYNC=1
 
           WORKDIR /build
           COPY . .
@@ -139,7 +140,7 @@ jobs:
 
           docker build \
             --build-arg commitHash="$SHORT_SHA" \
-            -t registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.12 \
+            -t registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.13 \
             -f "$UPSTREAM_DIR/docker/frontend/Dockerfile.startos" \
             "$UPSTREAM_DIR/frontend"
 
@@ -147,12 +148,12 @@ jobs:
             --build-context backend="$UPSTREAM_DIR/backend" \
             --build-context rustgbt="$UPSTREAM_DIR/rust" \
             --build-arg commitHash="$SHORT_SHA" \
-            -t registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.12 \
+            -t registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.13 \
             -f "$UPSTREAM_DIR/docker/backend/Dockerfile.startos" \
             "$UPSTREAM_DIR/backend"
 
-          docker image inspect registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.12 >/dev/null
-          docker image inspect registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.12 >/dev/null
+          docker image inspect registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.13 >/dev/null
+          docker image inspect registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.13 >/dev/null
         shell: bash
 
       - name: Build service packages
