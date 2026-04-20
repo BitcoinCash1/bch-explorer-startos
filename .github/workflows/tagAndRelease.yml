@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  packages: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,9 +23,6 @@ jobs:
         uses: actions/checkout@v5
         with:
           submodules: recursive
-
-      - name: Login to GHCR
-        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u CyberAshven --password-stdin
 
       - name: Find or create developer signing key
         run: |
@@ -173,12 +169,14 @@ jobs:
           FIRST_S9PK=$(ls *.s9pk | head -1)
           TITLE=$(start-cli s9pk inspect "$FIRST_S9PK" manifest | jq -r '.title')
           VERSION=$(start-cli s9pk inspect "$FIRST_S9PK" manifest | jq -r '.version')
-          VERSION_TAG="v${VERSION/:/.}"
+          UPSTREAM_TAG="${VERSION%%:*}"
           RELEASE_NOTES=$(start-cli s9pk inspect "$FIRST_S9PK" manifest | jq -r '.releaseNotes // "No release notes provided."')
           {
             echo "## What's Changed"
             echo ""
-            echo "Version: ${VERSION} (${VERSION_TAG})"
+            echo "Version: ${VERSION}"
+            echo ""
+            echo "Upstream tag: ${UPSTREAM_TAG}"
             echo ""
             echo "${RELEASE_NOTES}"
             echo ""
@@ -189,20 +187,20 @@ jobs:
           } > change-log.txt
           echo "title=${TITLE}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "vtag=${VERSION_TAG}" >> "$GITHUB_OUTPUT"
+          echo "tag=${UPSTREAM_TAG}" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      - name: Move release tags to current commit
+      - name: Move release tag to current commit
         run: |
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
-          git tag -f "${{ steps.meta.outputs.vtag }}"
-          git push origin -f "${{ steps.meta.outputs.vtag }}"
+          git tag -f "${{ steps.meta.outputs.tag }}"
+          git push origin -f "${{ steps.meta.outputs.tag }}"
 
       - name: Publish versioned release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.vtag }}
+          tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.title }} ${{ steps.meta.outputs.version }}
           prerelease: false
           body_path: change-log.txt
