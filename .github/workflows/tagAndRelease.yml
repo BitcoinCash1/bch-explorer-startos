@@ -38,23 +38,125 @@ jobs:
           fi
         shell: bash
 
-      - name: Pre-pull explorer images from Melroy registry
+      - name: Build explorer images locally from upstream source
         run: |
-          pull_with_retry() {
-            image="$1"
-            for attempt in 1 2 3 4 5; do
-              if docker pull "$image"; then
-                return 0
-              fi
-              echo "Pull failed for $image (attempt $attempt/5). Retrying in 15s..."
-              sleep 15
-            done
-            echo "Failed to pull $image after 5 attempts"
-            return 1
-          }
+          set -euo pipefail
 
-          pull_with_retry registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.12
-          pull_with_retry registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.12
+          UPSTREAM_DIR=/tmp/bitcoin-cash-explorer-upstream
+          rm -rf "$UPSTREAM_DIR"
+          git clone --depth 1 --branch 3.8.12 https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer.git "$UPSTREAM_DIR"
+
+          # Prepare upstream frontend/backend directories the same way upstream Docker CI does.
+          (cd "$UPSTREAM_DIR" && ./docker/init.sh 3.8.12)
+
+          cat > "$UPSTREAM_DIR/docker/frontend/Dockerfile.startos" <<'EOF'
+          FROM node:24-bookworm AS builder
+
+          ARG commitHash
+          ENV DOCKER_COMMIT_HASH=${commitHash}
+          ENV CYPRESS_INSTALL_BINARY=0
+          ENV NODE_ENV=production
+
+          WORKDIR /build
+          COPY . .
+          RUN apt-get update
+          RUN apt-get install -y build-essential rsync
+          RUN corepack enable
+          RUN cp explorer-frontend-config.sample.json explorer-frontend-config.json
+          RUN pnpm install
+          RUN pnpm build
+
+          FROM nginx:1.29.4-alpine
+
+          WORKDIR /patch
+
+          COPY --from=builder /build/entrypoint.sh .
+          COPY --from=builder /build/wait-for .
+          COPY --from=builder /build/dist/explorer /var/www/explorer
+          COPY --from=builder /build/nginx.conf /etc/nginx/
+          COPY --from=builder /build/nginx-explorer.conf /etc/nginx/conf.d/
+
+          RUN chmod +x /patch/entrypoint.sh
+          RUN chmod +x /patch/wait-for
+
+          RUN chown -R 1000:1000 /patch && chmod -R 755 /patch && \
+                  chown -R 1000:1000 /var/cache/nginx && \
+                  chown -R 1000:1000 /var/log/nginx && \
+                  chown -R 1000:1000 /etc/nginx/nginx.conf && \
+                  chown -R 1000:1000 /etc/nginx/conf.d && \
+                  chown -R 1000:1000 /var/www/explorer
+
+          RUN touch /var/run/nginx.pid && \
+                  chown -R 1000:1000 /var/run/nginx.pid
+
+          USER 1000
+
+          ENTRYPOINT ["/patch/entrypoint.sh"]
+          CMD ["nginx", "-g", "daemon off;"]
+          EOF
+
+          cat > "$UPSTREAM_DIR/docker/backend/Dockerfile.startos" <<'EOF'
+          FROM node:24-bookworm AS builder
+
+          ARG commitHash
+          ENV MEMPOOL_COMMIT_HASH=${commitHash}
+          ENV NODE_ENV=production
+          ENV PATH="/root/.cargo/bin:${PATH}"
+
+          RUN apt-get update && apt-get install -y curl build-essential pkg-config libssl-dev ca-certificates
+          RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal
+          RUN corepack enable
+
+          WORKDIR /build
+          COPY --chown=node:node . .
+          COPY --chown=node:node --from=backend . .
+          COPY --chown=node:node --from=rustgbt . ../rust/
+          ENV FD=/build/rust-gbt
+
+          RUN pnpm preinstall
+          RUN pnpm install --prod
+          RUN pnpm package
+
+          FROM node:24-bookworm-slim AS runtime
+
+          ENV NODE_OPTIONS=--max-old-space-size=16384
+          ENV NODE_ENV=production
+
+          WORKDIR /backend
+
+          RUN chown 1000:1000 ./
+          COPY --from=builder --chown=1000:1000 /build/package ./package/
+          COPY --from=builder --chown=1000:1000 /build/explorer-config-template.json /build/start.sh /build/wait-for-it.sh ./
+          RUN mv explorer-config-template.json explorer-config.json
+
+          HEALTHCHECK --interval=40s --timeout=20s --start-period=40s --retries=5 \
+            CMD node package/healthcheck.js
+
+          USER 1000
+
+          EXPOSE 8999
+
+          CMD ["/backend/start.sh"]
+          EOF
+
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
+          docker build \
+            --build-arg commitHash="$SHORT_SHA" \
+            -t registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.12 \
+            -f "$UPSTREAM_DIR/docker/frontend/Dockerfile.startos" \
+            "$UPSTREAM_DIR/frontend"
+
+          docker build \
+            --build-context backend="$UPSTREAM_DIR/backend" \
+            --build-context rustgbt="$UPSTREAM_DIR/rust" \
+            --build-arg commitHash="$SHORT_SHA" \
+            -t registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.12 \
+            -f "$UPSTREAM_DIR/docker/backend/Dockerfile.startos" \
+            "$UPSTREAM_DIR/backend"
+
+          docker image inspect registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.12 >/dev/null
+          docker image inspect registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.12 >/dev/null
         shell: bash
 
       - name: Build service packages
