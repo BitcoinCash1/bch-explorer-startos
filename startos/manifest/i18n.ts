@@ -4,7 +4,7 @@ export const short = {
 
 export const long = {
   en_US:
-    "BCH Explorer v3.8.13 is a self-hosted Bitcoin Cash block explorer powered by Melroy's bitcoin-cash-explorer. " +
+    "BCH Explorer v3.8.16 is a self-hosted Bitcoin Cash block explorer powered by Melroy's bitcoin-cash-explorer. " +
     'Browse BCH transactions, addresses, and blocks directly from your StartOS node. ' +
     'Includes the latest upstream fixes and connects to Fulcrum BCH for Electrum indexing.',
 }

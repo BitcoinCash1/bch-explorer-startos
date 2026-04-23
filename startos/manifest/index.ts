@@ -19,7 +19,7 @@ export const manifest = setupManifest({
     frontend: {
       source: {
         dockerTag:
-          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.13',
+          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:3.8.16',
       },
       arch: ['x86_64'],
       emulateMissingAs: 'x86_64',
@@ -27,7 +27,7 @@ export const manifest = setupManifest({
     backend: {
       source: {
         dockerTag:
-          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.13',
+          'registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:3.8.16',
       },
       arch: ['x86_64'],
       emulateMissingAs: 'x86_64',
