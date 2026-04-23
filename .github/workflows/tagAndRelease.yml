@@ -156,10 +156,12 @@ jobs:
           docker image inspect registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:"$UPSTREAM_TAG" >/dev/null
           docker image inspect registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:"$UPSTREAM_TAG" >/dev/null
 
-          echo "Pushing images to registry.melroy.org..."
-          echo "${{ secrets.REGISTRY_MELROY_PASS }}" | docker login registry.melroy.org -u "${{ secrets.REGISTRY_MELROY_USER }}" --password-stdin
-          docker push registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:"$UPSTREAM_TAG"
-          docker push registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:"$UPSTREAM_TAG"
+          echo "Attempting to push images to registry.melroy.org (optional)..."
+          {
+            echo "${{ secrets.REGISTRY_MELROY_PASS }}" | docker login registry.melroy.org -u "${{ secrets.REGISTRY_MELROY_USER }}" --password-stdin && \
+            docker push registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend:"$UPSTREAM_TAG" && \
+            docker push registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:"$UPSTREAM_TAG"
+          } || echo "Warning: Registry push failed (non-fatal). Build will use locally-built images."
         shell: bash
 
       - name: Build service packages
@@ -212,4 +214,3 @@ jobs:
           prerelease: false
           body_path: change-log.txt
           files: ./*.s9pk
-
