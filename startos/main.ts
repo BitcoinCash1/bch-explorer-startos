@@ -93,7 +93,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
     .addDaemon('api', {
       subcontainer: apiSub,
       exec: {
-        command: ['./start.sh'],
+        command: [
+          'sh', '-c',
+          // BCHD returns `rawtx` instead of `tx` for verbosity=2 getblock; normalize before start
+          "node -e \"const fs=require('fs'),p='/backend/package/api/blocks.js',c=fs.readFileSync(p,'utf8');fs.writeFileSync(p,c.replace('const verboseBlock = await bitcoin_client_1.default.getBlock(blockHash, 2);','const verboseBlock = await bitcoin_client_1.default.getBlock(blockHash, 2); verboseBlock.tx = verboseBlock.tx || verboseBlock.rawtx || [];'))\" && exec ./start.sh",
+        ],
         env: {
           EXPLORER_BACKEND: 'electrum',
           EXPLORER_NETWORK: 'mainnet',
