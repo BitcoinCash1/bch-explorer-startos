@@ -57,6 +57,21 @@ export const main = sdk.setupMain(async ({ effects }) => {
     console.warn('Could not read node store.json — using defaults')
   }
 
+  // BCHD returns `rawtx` instead of `tx` for verbosity=2 getblock, and its
+  // getrawtransaction only accepts (txid, verbose), not the 4-param form the
+  // explorer backend uses. Patch the built JS in-place (idempotent).
+  await apiSub.exec([
+    'node', '-e',
+    `const fs=require('fs');
+function p(file,re,s){const c=fs.readFileSync(file,'utf8');const n=c.replace(re,s);if(c!==n)fs.writeFileSync(file,n);}
+p('/backend/package/api/blocks.js',
+  /const verboseBlock = await bitcoin_client_1\\.default\\.getBlock\\(blockHash, 2\\);/,
+  'const verboseBlock = await bitcoin_client_1.default.getBlock(blockHash, 2); verboseBlock.tx = verboseBlock.tx || verboseBlock.rawtx || [];');
+p('/backend/package/api/bitcoin/bitcoin-api.js',
+  /\\.getRawTransaction\\(txId, 2, '', true\\)/,
+  '.getRawTransaction(txId, 2)');`,
+  ])
+
   return sdk.Daemons.of(effects)
     .addDaemon('db', {
       subcontainer: await sdk.SubContainer.of(
@@ -93,11 +108,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     .addDaemon('api', {
       subcontainer: apiSub,
       exec: {
-        command: [
-          'sh', '-c',
-          // BCHD returns `rawtx` instead of `tx` for verbosity=2 getblock; normalize before start
-          "node -e \"const fs=require('fs'),p='/backend/package/api/blocks.js',c=fs.readFileSync(p,'utf8');fs.writeFileSync(p,c.replace('const verboseBlock = await bitcoin_client_1.default.getBlock(blockHash, 2);','const verboseBlock = await bitcoin_client_1.default.getBlock(blockHash, 2); verboseBlock.tx = verboseBlock.tx || verboseBlock.rawtx || [];'))\" && exec ./start.sh",
-        ],
+        command: ['./start.sh'],
         env: {
           EXPLORER_BACKEND: 'electrum',
           EXPLORER_NETWORK: 'mainnet',
