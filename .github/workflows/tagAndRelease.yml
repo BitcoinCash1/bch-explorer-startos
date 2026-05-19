@@ -129,7 +129,9 @@ jobs:
           COPY --chown=node:node --from=rustgbt . ../rust/
           ENV FD=/build/rust-gbt
 
+          RUN mkdir -p rust-gbt
           RUN pnpm preinstall
+          RUN rm -rf node_modules/.pnpm-workspace-state-v1.json
           RUN pnpm install --prod
           RUN pnpm package
 
