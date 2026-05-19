@@ -4,6 +4,8 @@ on:
   push:
     branches: ['master']
     paths-ignore: ['README.md']
+  repository_dispatch:
+    types: [upstream-release]
 
 permissions:
   contents: write
@@ -32,6 +34,63 @@ jobs:
           else
             start-cli init-key
           fi
+        shell: bash
+
+      # Runs only when triggered by GitLab CI via repository_dispatch after a new upstream tag.
+      # Bumps the version files in-place so the rest of the build picks them up automatically.
+      # Also commits and pushes to master so the version stays in sync for future runs.
+      - name: Auto-bump version for upstream release
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          set -euo pipefail
+          DISPATCHED_TAG="${{ github.event.client_payload.tag }}"
+          echo "Upstream release dispatched: $DISPATCHED_TAG"
+
+          CURRENT_VAR=$(grep -E '^[[:space:]]*current:' startos/versions/index.ts | head -1 \
+            | sed -E 's/.*current:[[:space:]]*([A-Za-z0-9_]+).*/\1/')
+          VERSION_FILE_BASE=$(echo "$CURRENT_VAR" | sed -E 's/^v_//; s/_/./g')
+          CURRENT_UPSTREAM=$(grep -E "version:[[:space:]]*'" "startos/versions/v${VERSION_FILE_BASE}.ts" \
+            | head -1 | sed -E "s/.*version:[[:space:]]*'([^':]+).*/\1/")
+
+          if [ "$CURRENT_UPSTREAM" = "$DISPATCHED_TAG" ]; then
+            echo "Already at $DISPATCHED_TAG — no bump needed"
+            exit 0
+          fi
+          echo "Bumping $CURRENT_UPSTREAM -> $DISPATCHED_TAG"
+
+          TAG_VAR="v_$(echo "$DISPATCHED_TAG" | tr '.' '_')_0"
+          NEW_VERSION="${DISPATCHED_TAG}:0"
+          NEW_FILE="startos/versions/v${DISPATCHED_TAG}.0.ts"
+
+          # Write new version .ts file using echo to avoid YAML heredoc conflicts
+          echo "import { VersionInfo } from '@start9labs/start-sdk'" > "$NEW_FILE"
+          echo "" >> "$NEW_FILE"
+          echo "export const ${TAG_VAR} = VersionInfo.of({" >> "$NEW_FILE"
+          echo "  version: '${NEW_VERSION}'," >> "$NEW_FILE"
+          echo "  releaseNotes:" >> "$NEW_FILE"
+          echo "    'Upstream ${DISPATCHED_TAG}. All Start9 patches (BCHD compatibility, B/s chart fix, Goggles start height, getMempoolEntry shim) carried forward.'," >> "$NEW_FILE"
+          echo "  migrations: {" >> "$NEW_FILE"
+          echo "    up: async ({ effects }) => {}," >> "$NEW_FILE"
+          echo "    down: async ({ effects }) => {}," >> "$NEW_FILE"
+          echo "  }," >> "$NEW_FILE"
+          echo "})" >> "$NEW_FILE"
+
+          # Update manifest docker tags
+          sed -i "s|explorer-frontend:[0-9][0-9.]*'|explorer-frontend:${DISPATCHED_TAG}'|g" startos/manifest/index.ts
+          sed -i "s|explorer-backend:[0-9][0-9.]*'|explorer-backend:${DISPATCHED_TAG}'|g" startos/manifest/index.ts
+
+          # Update versions/index.ts: prepend import, swap current, add old current to other
+          sed -i "1a import { ${TAG_VAR} } from './${DISPATCHED_TAG}.0'" startos/versions/index.ts
+          sed -i "s/current: ${CURRENT_VAR}/current: ${TAG_VAR}/" startos/versions/index.ts
+          sed -i "s/other: \[/other: [${CURRENT_VAR}, /" startos/versions/index.ts
+
+          # Commit so master stays in sync (GITHUB_TOKEN push does not re-trigger workflows)
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add startos/versions/index.ts "$NEW_FILE" startos/manifest/index.ts
+          git commit -m "feat: auto-bump to upstream ${DISPATCHED_TAG} (v${NEW_VERSION})"
+          git push origin master
+          echo "Version bump committed — continuing build"
         shell: bash
 
       - name: Derive upstream tag from current version graph
