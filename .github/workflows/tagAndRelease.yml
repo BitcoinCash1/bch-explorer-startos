@@ -85,8 +85,6 @@ jobs:
           sed -i "s/other: \[/other: [${CURRENT_VAR}, /" startos/versions/index.ts
 
           # Commit so master stays in sync (GITHUB_TOKEN push does not re-trigger workflows)
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
           git add startos/versions/index.ts "$NEW_FILE" startos/manifest/index.ts
           git commit -m "feat: auto-bump to upstream ${DISPATCHED_TAG} (v${NEW_VERSION})"
           git push origin master
@@ -226,8 +224,6 @@ jobs:
 
       - name: Move release tag to current commit
         run: |
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
           git tag -f "${{ steps.meta.outputs.tag }}"
           git push origin -f "${{ steps.meta.outputs.tag }}"
 
