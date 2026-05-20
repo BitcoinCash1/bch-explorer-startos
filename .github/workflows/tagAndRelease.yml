@@ -61,9 +61,6 @@ jobs:
 
       - name: Pull explorer images from registry (or build locally as fallback)
         run: bash scripts/pull-images.sh "${{ steps.upstream.outputs.UPSTREAM_TAG }}"
-        env:
-          REGISTRY_MELROY_USER: ${{ secrets.REGISTRY_MELROY_USER }}
-          REGISTRY_MELROY_PASS: ${{ secrets.REGISTRY_MELROY_PASS }}
         shell: bash
 
       - name: Build service packages

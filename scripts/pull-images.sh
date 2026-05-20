@@ -11,16 +11,11 @@ FRONTEND=registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-frontend
 BACKEND=registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-backend:"$UPSTREAM_TAG"
 
 PULLED=false
-if [ -n "${REGISTRY_MELROY_PASS:-}" ]; then
-  echo "$REGISTRY_MELROY_PASS" | docker login registry.melroy.org -u "$REGISTRY_MELROY_USER" --password-stdin
-  if docker pull "$FRONTEND" && docker pull "$BACKEND"; then
-    echo "Images pulled from registry successfully."
-    PULLED=true
-  else
-    echo "Registry pull failed — falling back to local build."
-  fi
+if docker pull "$FRONTEND" && docker pull "$BACKEND"; then
+  echo "Images pulled from registry successfully."
+  PULLED=true
 else
-  echo "Registry credentials not configured — falling back to local build."
+  echo "Registry pull failed — falling back to local build."
 fi
 
 if [ "$PULLED" = "false" ]; then
