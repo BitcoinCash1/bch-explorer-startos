@@ -38,7 +38,7 @@ EOF
 
 sed -i "s|explorer-frontend:[0-9][0-9.]*'|explorer-frontend:${DISPATCHED_TAG}'|g" startos/manifest/index.ts
 sed -i "s|explorer-backend:[0-9][0-9.]*'|explorer-backend:${DISPATCHED_TAG}'|g" startos/manifest/index.ts
-sed -i "1a import { ${TAG_VAR} } from './${DISPATCHED_TAG}.0'" startos/versions/index.ts
+sed -i "1a import { ${TAG_VAR} } from './v${DISPATCHED_TAG}.0'" startos/versions/index.ts
 sed -i "s/current: ${CURRENT_VAR}/current: ${TAG_VAR}/" startos/versions/index.ts
 sed -i "s/other: \[/other: [${CURRENT_VAR}, /" startos/versions/index.ts
 
