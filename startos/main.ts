@@ -262,7 +262,7 @@ p('/backend/package/api/statistics/statistics.js',
         return webSub
       })(),
       exec: {
-          // v3.11.0 upstream images from registry.melroy.org
+          // upstream images from ghcr.io/bitcoincash1/
         command: sdk.useEntrypoint(),
         env: {
           // Entrypoint maps these to nginx config sed replacements
