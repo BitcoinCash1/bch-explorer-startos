@@ -3,7 +3,7 @@ name: Tag and Release
 on:
   push:
     branches: ['master']
-    paths-ignore: ['README.md']
+    paths-ignore: ['*.md']
   repository_dispatch:
     types: [upstream-release]
 
