@@ -139,6 +139,21 @@ p('/backend/package/api/statistics/statistics.js',
   'memPoolArray.filter((tx) => tx.feePerSize != null)');`,
   ])
 
+  // [flowee-shim] Flowee the Hub strictly validates getblock parameter count.
+  // The upstream 3.11.13 Explorer added a third boolean argument to getBlock()
+  // (getBlock(hash, 2, true)) which BCHN silently ignores but Flowee rejects
+  // with "JSON value is not a boolean as expected" — crashing runMainUpdateLoop.
+  // Strip the extra trailing boolean for the two affected call sites.
+  if (nodePackageId === 'flowee') {
+    await apiSub.exec(['node', '-e',
+      `const fs=require('fs');
+function p(file,re,s){const c=fs.readFileSync(file,'utf8');const n=c.replace(re,s);if(c!==n){fs.writeFileSync(file,n);console.log('[flowee-shim] patched',file);}else{console.log('[flowee-shim] no-op',file);}}
+p('/backend/package/api/bitcoin/bitcoin-api.js',
+  /this\\.bitcoindClient\\.getBlock\\(hash, 2, true\\)/g,
+  'this.bitcoindClient.getBlock(hash, 2)');`,
+    ])
+  }
+
   return sdk.Daemons.of(effects)
     .addDaemon('db', {
       subcontainer: await sdk.SubContainer.of(
