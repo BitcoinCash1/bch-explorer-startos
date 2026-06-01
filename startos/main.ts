@@ -1,3 +1,4 @@
+import { FileHelper } from '@start9labs/start-sdk'
 import { sdk } from './sdk'
 import { webPort, dbPort } from './utils'
 import { storeJson } from './file-models/store.json'
@@ -136,22 +137,25 @@ p('/backend/package/api/database-migration.js',
 // directory: "Directory not empty") so the sed-based approach silently did nothing.
 p('/backend/package/api/statistics/statistics.js',
   /memPoolArray\\.filter\\(\\(tx\\) => tx\\.feePerSize\\)/,
-  'memPoolArray.filter((tx) => tx.feePerSize != null)');`,
+  'memPoolArray.filter((tx) => tx.feePerSize != null)');
+${nodePackageId === 'flowee' ? `// [flowee-shim] Flowee without txindex cannot serve getrawtransaction for confirmed txs.
+// All txs in a block fall back to skeletons with is_coinbase=false, so the post-sort
+// coinbase-check always fails. Log and continue instead of throwing.
+p('/backend/package/api/blocks.js',
+  /throw new Error\\('Expected first tx in a block to be a coinbase, but found something else'\\)/,
+  "logger_1.default.warn('[flowee-shim] coinbase tx not identifiable (Flowee may lack txindex); continuing')");` : ''}`,
   ])
 
-  // [flowee-shim] Flowee the Hub strictly validates getblock parameter count.
-  // The upstream 3.11.13 Explorer added a third boolean argument to getBlock()
-  // (getBlock(hash, 2, true)) which BCHN silently ignores but Flowee rejects
-  // with "JSON value is not a boolean as expected" — crashing runMainUpdateLoop.
-  // Strip the extra trailing boolean for the two affected call sites.
+  // [flowee-shim] Flowee's getblock/getrawtransaction only accept boolean verbose, not
+  // integer verbosity levels (0/1/2) or extra parameters. Monkey-patch Client.prototype
+  // at require-hook time so ALL call sites are fixed without touching individual files.
+  // For verbosity=2 (full tx data), hydrate each transaction from getRawTransaction.
   if (nodePackageId === 'flowee') {
-    await apiSub.exec(['node', '-e',
-      `const fs=require('fs');
-function p(file,re,s){const c=fs.readFileSync(file,'utf8');const n=c.replace(re,s);if(c!==n){fs.writeFileSync(file,n);console.log('[flowee-shim] patched',file);}else{console.log('[flowee-shim] no-op',file);}}
-p('/backend/package/api/bitcoin/bitcoin-api.js',
-  /this\\.bitcoindClient\\.getBlock\\(hash, 2, true\\)/g,
-  'this.bitcoindClient.getBlock(hash, 2)');`,
-    ])
+    const hookSrc = `(function(){var coinbaseTxids=new Set();try{var m=require('/backend/package/rpc-api/index'),C=m.Client;if(C.prototype.__floweePatched)return;C.prototype.__floweePatched=true;var _gb=C.prototype.getBlock;C.prototype.getBlock=function(hash,verbosity,patterns){var flv=(verbosity===0||verbosity===false)?false:true,needHydrate=(verbosity===2),self=this,p=_gb.call(self,hash,flv);if(!needHydrate)return p;return p.then(function(b){if(!b||!Array.isArray(b.tx)||!b.tx.length||typeof b.tx[0]!=='string')return b;coinbaseTxids.add(b.tx[0]);return Promise.all(b.tx.map(function(txid,i){return self.getRawTransaction(txid,true).then(function(tx){if(i===0&&tx&&tx.vin&&tx.vin[0]&&!tx.vin[0].coinbase){tx=Object.assign({},tx);tx.vin=[Object.assign({},tx.vin[0],{coinbase:'0000'})];}return tx;}).catch(function(){return{txid:txid};});})).then(function(txs){return Object.assign({},b,{tx:txs});});});};var _rt=C.prototype.getRawTransaction;C.prototype.getRawTransaction=function(txid,verbosity){var flv=(verbosity===0||verbosity===false)?false:true;return _rt.call(this,txid,flv).catch(function(e){var msg=(e&&(e.message||String(e)))||'';if(/no such mempool|transaction not found/i.test(msg)){console.warn('[flowee-shim] getrawtransaction fallback for',txid);return{txid:txid,hash:txid,version:1,size:0,vsize:0,weight:0,locktime:0,vin:[{coinbase:'0000',sequence:4294967295}],vout:[],hex:'',size:0,locktime:0,version:1,fee:0,status:{confirmed:true,block_height:0,block_hash:''},time:0,blocktime:0};}throw e;});};var _grm=C.prototype.getRawMemPool;C.prototype.getRawMemPool=function(verbose){if(verbose==null)return _grm.call(this);return _grm.call(this,verbose);};console.log('[flowee-shim] Client patched (getBlock+getRawTransaction+getRawMemPool)');}catch(e){console.error('[flowee-shim] error:',e.message);}try{var B=require('/backend/package/api/blocks');var blk=B&&(B.default||B);if(blk&&typeof blk.$getTransactionsExtended==='function'&&!blk.__floweeBlocksPatched){blk.__floweeBlocksPatched=true;var _gte=blk.$getTransactionsExtended.bind(blk);blk.$getTransactionsExtended=async function(){try{return await _gte.apply(blk,arguments);}catch(e2){var em=(e2&&e2.message)||'';if(/Expected first tx.*coinbase/i.test(em)){console.warn('[flowee-shim] coinbase check suppressed; using minimal coinbase placeholder');var bt=arguments[2]||0;return[{txid:'0000000000000000000000000000000000000000000000000000000000000000',hash:'0000000000000000000000000000000000000000000000000000000000000000',version:1,size:0,vsize:0,weight:0,locktime:0,vin:[{is_coinbase:true,txid:'',vout:0,prevout:null,scriptsig:'',scriptsig_asm:'',sequence:4294967295,witness:[]}],vout:[],fee:0,status:{confirmed:true,block_height:0,block_hash:''},blockTime:bt}];}throw e2;}};console.log('[flowee-shim] Blocks.$getTransactionsExtended patched');}}catch(eB){console.warn('[flowee-shim] blocks patch:',eB.message);}})();`
+    await FileHelper.string({
+      base: sdk.volumes.main,
+      subpath: '/cache/flowee-require-hook.js',
+    }).write(effects, hookSrc)
   }
 
   return sdk.Daemons.of(effects)
@@ -210,6 +214,9 @@ p('/backend/package/api/bitcoin/bitcoin-api.js',
           STATISTICS_ENABLED: 'true',
           EXPLORER_AUDIT: 'true',
           EXPLORER_GOGGLES_INDEXING: 'true',
+          ...(nodePackageId === 'flowee'
+            ? { NODE_OPTIONS: '--require /backend/cache/flowee-require-hook.js' }
+            : {}),
         },
       },
       ready: {
