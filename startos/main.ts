@@ -10,11 +10,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
   const store = await storeJson.read().once()
   const dbPassword = store?.dbPassword ?? 'explorer'
   const nodePackageId = store?.nodePackageId ?? 'bitcoincashd'
-  const network = (store?.network ?? 'mainnet') as
-    | 'mainnet'
-    | 'testnet4'
-    | 'chipnet'
-    | 'scalenet'
   const nodeHost = `${nodePackageId}.startos`
   // BCHD serves RPC over native TLS; the plaintext stunnel proxy on port 8334
   // forwards to its TLS RPC on 8332 internally. Melroy's backend has no TLS
@@ -46,18 +41,25 @@ export const main = sdk.setupMain(async ({ effects }) => {
     'api-sub',
   )
 
-  // Read node RPC credentials from the mounted dependency volume inside the subcontainer
+  // Read node RPC credentials and network from the mounted dependency volume.
+  // Network is derived from the node — it is the single source of truth.
+  // Explorer and Fulcrum follow automatically when the node restarts.
   let nodeUser = nodePackageId
   let nodePass = ''
+  let network: 'mainnet' | 'testnet4' | 'chipnet' | 'scalenet' = 'mainnet'
   try {
     const result = await apiSub.exec(['cat', '/mnt/node/store.json'])
     if (result.exitCode === 0) {
       const nodeStore = JSON.parse(result.stdout.toString()) as {
         rpcUser?: string
         rpcPassword?: string
+        network?: string
       }
       nodeUser = nodeStore.rpcUser ?? nodeUser
       nodePass = nodeStore.rpcPassword ?? nodePass
+      if (nodeStore.network) {
+        network = nodeStore.network as 'mainnet' | 'testnet4' | 'chipnet' | 'scalenet'
+      }
     }
   } catch {
     console.warn('Could not read node store.json — using defaults')
@@ -293,6 +295,8 @@ p('/backend/package/api/statistics/statistics.js',
           MAINNET_ENABLED: network === 'mainnet' ? 'true' : 'false',
           TESTNET_ENABLED: 'false',
           TESTNET4_ENABLED: network === 'testnet4' ? 'true' : 'false',
+          CHIPNET_ENABLED: network === 'chipnet' ? 'true' : 'false',
+          SCALENET_ENABLED: network === 'scalenet' ? 'true' : 'false',
           SIGNET_ENABLED: 'false',
           ITEMS_PER_PAGE: '10',
           KEEP_BLOCKS_AMOUNT: '8',
