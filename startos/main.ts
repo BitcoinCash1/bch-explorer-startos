@@ -43,26 +43,42 @@ export const main = sdk.setupMain(async ({ effects }) => {
 
   // Read node RPC credentials and network from the mounted dependency volume.
   // Network is derived from the node — it is the single source of truth.
-  // Explorer and Fulcrum follow automatically when the node restarts.
+  // Double-read with a 5 s gap: LXC bind-mounts take a few seconds to propagate
+  // after the subcontainer is created, so the first read can return stale data
+  // (e.g. flowee "chipnet") even when the configured dependency is bitcoincashd "mainnet".
+  // The settled value is used for both the DB subpath mount and the API env.
   let nodeUser = nodePackageId
   let nodePass = ''
-  let network: 'mainnet' | 'testnet4' | 'chipnet' | 'scalenet' = 'mainnet'
-  try {
-    const result = await apiSub.exec(['cat', '/mnt/node/store.json'])
-    if (result.exitCode === 0) {
-      const nodeStore = JSON.parse(result.stdout.toString()) as {
-        rpcUser?: string
-        rpcPassword?: string
-        network?: string
+  type NetworkId = 'mainnet' | 'testnet4' | 'chipnet' | 'scalenet'
+  let network: NetworkId = 'mainnet'
+  const readNodeStore = async () => {
+    try {
+      const result = await apiSub.exec(['cat', '/mnt/node/store.json'])
+      if (result.exitCode === 0) {
+        return JSON.parse(result.stdout.toString()) as {
+          rpcUser?: string
+          rpcPassword?: string
+          network?: string
+        }
       }
-      nodeUser = nodeStore.rpcUser ?? nodeUser
-      nodePass = nodeStore.rpcPassword ?? nodePass
-      if (nodeStore.network) {
-        network = nodeStore.network as 'mainnet' | 'testnet4' | 'chipnet' | 'scalenet'
-      }
+    } catch {}
+    return null
+  }
+  const store1 = await readNodeStore()
+  if (store1) {
+    nodeUser = store1.rpcUser ?? nodeUser
+    nodePass = store1.rpcPassword ?? nodePass
+    if (store1.network) network = store1.network as NetworkId
+  } else {
+    console.warn('Could not read node store.json (attempt 1) — using defaults')
+  }
+  await new Promise<void>(r => setTimeout(r, 5000))
+  const store2 = await readNodeStore()
+  if (store2?.network) {
+    if (store2.network !== network) {
+      console.log(`[node-store] Network settled to ${store2.network} (was ${network} on first read)`)
     }
-  } catch {
-    console.warn('Could not read node store.json — using defaults')
+    network = store2.network as NetworkId
   }
 
   // Fix cache directory permissions — the volume subpath is created with restrictive
@@ -260,6 +276,44 @@ p('/backend/package/api/statistics/statistics.js',
             `&& echo "[frontend-shim] mining-pools proxy added" ` +
             `|| echo "[frontend-shim] mining-pools proxy sed failed"; ` +
           `else echo "[frontend-shim] mining-pools proxy already present"; fi`,
+        ])
+        // Add nginx location blocks for non-mainnet networks.
+        // The nginx template only has mainnet /api/ routes; on chipnet/testnet4/scalenet
+        // the Angular frontend calls /chipnet/api/... paths which have no proxy → 502.
+        // We reuse the __PLACEHOLDER__ vars from the mainnet blocks so the entrypoint's
+        // sed pass replaces them with the real backend host/port at startup.
+        await webSub.exec([
+          'sh', '-c',
+          [
+            `CONF=/etc/nginx/conf.d/nginx-explorer.conf`,
+            `MARKER='# startos-network-routes'`,
+            `if grep -qF "$MARKER" "$CONF" 2>/dev/null; then echo "[network-routes] already patched"; exit 0; fi`,
+            `echo '# non-mainnet: all routed to same backend (EXPLORER_NETWORK env sets chain)' >> "$CONF"`,
+            `echo 'location ~ ^/(chipnet|testnet4|scalenet|testnet3|regtest)/api/v1/ws$ {' >> "$CONF"`,
+            `echo '    rewrite ^/[^/]+(/api/v1/ws)$ $1 break;' >> "$CONF"`,
+            `echo '    proxy_pass http://__EXPLORER_BACKEND_MAINNET_HTTP_HOST__:__EXPLORER_BACKEND_MAINNET_HTTP_PORT__;' >> "$CONF"`,
+            `echo '    proxy_http_version 1.1;' >> "$CONF"`,
+            `echo '    proxy_set_header Upgrade $http_upgrade;' >> "$CONF"`,
+            `echo '    proxy_set_header Connection "Upgrade";' >> "$CONF"`,
+            `echo '}' >> "$CONF"`,
+            `echo 'location ~ ^/(chipnet|testnet4|scalenet|testnet3|regtest)/ws$ {' >> "$CONF"`,
+            `echo '    rewrite ^/[^/]+(/ws)$ $1 break;' >> "$CONF"`,
+            `echo '    proxy_pass http://__EXPLORER_BACKEND_MAINNET_HTTP_HOST__:__EXPLORER_BACKEND_MAINNET_HTTP_PORT__;' >> "$CONF"`,
+            `echo '    proxy_http_version 1.1;' >> "$CONF"`,
+            `echo '    proxy_set_header Upgrade $http_upgrade;' >> "$CONF"`,
+            `echo '    proxy_set_header Connection "Upgrade";' >> "$CONF"`,
+            `echo '}' >> "$CONF"`,
+            `echo 'location ~ ^/(chipnet|testnet4|scalenet|testnet3|regtest)/api/v1/(.*)$ {' >> "$CONF"`,
+            `echo '    rewrite ^/[^/]+/api/v1/(.*)$ /api/v1/$1 break;' >> "$CONF"`,
+            `echo '    proxy_pass http://__EXPLORER_BACKEND_MAINNET_HTTP_HOST__:__EXPLORER_BACKEND_MAINNET_HTTP_PORT__;' >> "$CONF"`,
+            `echo '}' >> "$CONF"`,
+            `echo 'location ~ ^/(chipnet|testnet4|scalenet|testnet3|regtest)/api/(.*)$ {' >> "$CONF"`,
+            `echo '    rewrite ^/[^/]+/api/(.*)$ /api/v1/$1 break;' >> "$CONF"`,
+            `echo '    proxy_pass http://__EXPLORER_BACKEND_MAINNET_HTTP_HOST__:__EXPLORER_BACKEND_MAINNET_HTTP_PORT__;' >> "$CONF"`,
+            `echo '}' >> "$CONF"`,
+            `echo "$MARKER" >> "$CONF"`,
+            `echo "[network-routes] added multi-network nginx location blocks"`,
+          ].join('\n'),
         ])
         await webSub.exec([
           'sh', '-c',
