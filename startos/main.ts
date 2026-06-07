@@ -72,7 +72,10 @@ export const main = sdk.setupMain(async ({ effects }) => {
   } else {
     console.warn('Could not read node store.json (attempt 1) — using defaults')
   }
-  await new Promise<void>(r => setTimeout(r, 5000))
+  // Wait for mount to settle, then re-read network (credentials don't change).
+  // Observed LXC bind-mount propagation delay is 10-15 s; 20 s ensures the second
+  // read always sees the settled value even on slow hosts.
+  await new Promise<void>(r => setTimeout(r, 20000))
   const store2 = await readNodeStore()
   if (store2?.network) {
     if (store2.network !== network) {
