@@ -14,7 +14,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
   // BCHD serves RPC over native TLS; the plaintext stunnel proxy on port 8334
   // forwards to its TLS RPC on 8332 internally. Melroy's backend has no TLS
   // support for CORE_RPC, so we route through the proxy when bchd is selected.
-  const nodeRpcPort = nodePackageId === 'bchd' ? '8334' : '8332'
+  // nodeRpcPort for BCHN is network-dependent and will be resolved after reading the node store.
+  let nodeRpcPort = nodePackageId === 'bchd' ? '8334' : '8332'
 
   // Always connect to Fulcrum BCH for Electrum indexing
   const electrumHost = 'fulcrum-bch.startos'
@@ -82,6 +83,16 @@ export const main = sdk.setupMain(async ({ effects }) => {
       console.log(`[node-store] Network settled to ${store2.network} (was ${network} on first read)`)
     }
     network = store2.network as NetworkId
+  }
+
+  // BCHN remaps its RPC port per network to avoid clashing with its own ZMQ ports.
+  // All other supported nodes (BCHD, Flowee, Knuth) listen on 8332 for every network.
+  if (nodePackageId === 'bitcoincashd') {
+    const bitcoincashdRpcPorts: Record<string, string> = {
+      mainnet: '8332', testnet3: '18332', testnet4: '28342',
+      scalenet: '38332', chipnet: '48332', regtest: '18443',
+    }
+    nodeRpcPort = bitcoincashdRpcPorts[network] ?? '8332'
   }
 
   // Fix cache directory permissions — the volume subpath is created with restrictive
