@@ -222,7 +222,17 @@ p('/backend/package/api/statistics/statistics.js',
     .addDaemon('api', {
       subcontainer: apiSub,
       exec: {
-        command: ['./start.sh'],
+        // Clean up stale state from a previous run before each start attempt.
+        // When the SDK restarts only the daemon (not the whole subcontainer), the
+        // old node process can survive with its PID file and port 8999 still held,
+        // causing "Another mempool nodejs process is already running" + EADDRINUSE on
+        // every subsequent restart attempt. Fix: kill the zombie and clear its lock.
+        command: ['sh', '-c',
+          'rm -f /backend/package/bch-explorer.pid 2>/dev/null; ' +
+          'STALE=$(ss -tlnp 2>/dev/null | grep ":8999 " | sed "s/.*pid=//;s/,.*//"); ' +
+          'if [ -n "$STALE" ]; then echo "[startup] killing stale backend PID $STALE"; kill -9 $STALE 2>/dev/null || true; sleep 1; fi; ' +
+          './start.sh',
+        ],
         env: {
           EXPLORER_BACKEND: 'electrum',
           EXPLORER_NETWORK: network,
