@@ -71,16 +71,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
     nodePass = store1.rpcPassword ?? nodePass
     if (store1.network) network = store1.network as NetworkId
   } else {
-    console.warn('Could not read node store.json (attempt 1) — using defaults')
+    console.warn('[node-store] Could not read store.json (attempt 1) — using defaults')
   }
-  // Wait for mount to settle, then re-read network (credentials don't change).
-  // Observed LXC bind-mount propagation delay is 10-15 s; 20 s ensures the second
-  // read always sees the settled value even on slow hosts.
-  await new Promise<void>(r => setTimeout(r, 20000))
+  // Wait for LXC bind-mount to propagate (observed delay: 10-15 s; 20 s is conservative).
+  await new Promise<void>(r => setTimeout(r, 20_000))
   const store2 = await readNodeStore()
   if (store2?.network) {
     if (store2.network !== network) {
-      console.log(`[node-store] Network settled to ${store2.network} (was ${network} on first read)`)
+      console.log(`[node-store] Network settled to '${store2.network}' (was '${network}' on first read)`)
     }
     network = store2.network as NetworkId
   }
@@ -196,6 +194,27 @@ p('/backend/package/api/statistics/statistics.js',
     'db-sub',
   )
 
+  // Monitor BCHN's network every 15s. When it changes, call effects.restart() to
+  // re-execute main.ts so it remounts the correct DB directory and passes the right
+  // EXPLORER_NETWORK env to the backend. This is the ONLY mechanism that re-runs
+  // main.ts — daemon exit code 1 only restarts the daemon, not the full service.
+  let netMonitorActive = true
+  ;(async () => {
+    while (netMonitorActive) {
+      await new Promise<void>(r => setTimeout(r, 15_000))
+      if (!netMonitorActive) break
+      try {
+        const s = await readNodeStore()
+        if (s?.network && s.network !== network) {
+          console.log(`[net-monitor] BCHN network changed ${network} -> ${s.network} — restarting service`)
+          netMonitorActive = false
+          await effects.restart()
+          return
+        }
+      } catch {}
+    }
+  })().catch(() => {})
+
   return sdk.Daemons.of(effects)
     .addDaemon('db', {
       subcontainer: dbSub,
@@ -222,36 +241,14 @@ p('/backend/package/api/statistics/statistics.js',
     .addDaemon('api', {
       subcontainer: apiSub,
       exec: {
-        // Clean up stale state from a previous run before each start attempt.
-        // When the SDK restarts only the daemon (not the whole subcontainer), the
-        // old node process can survive with its PID file and port 8999 still held,
-        // causing "Another mempool nodejs process is already running" + EADDRINUSE on
-        // every subsequent restart attempt. Fix: kill the zombie and clear its lock.
+        // Clean up stale state from a previous run: PID file and port 8999.
+        // Network monitoring is now in main.ts (effects.restart() for proper service restart).
         command: ['sh', '-c',
           [
-            // Cleanup stale state from previous run
             `rm -f /backend/package/bch-explorer.pid 2>/dev/null`,
             `STALE=$(ss -tlnp 2>/dev/null | grep ":8999 " | sed "s/.*pid=//;s/,.*//")`,
             `if [ -n "$STALE" ]; then echo "[startup] killing stale backend PID $STALE"; kill -9 "$STALE" 2>/dev/null || true; sleep 1; fi`,
-            // Start backend in background; monitor BCHN network every 15s.
-            // When BCHN switches networks, exit code 1 triggers a full SDK restart
-            // so main.ts re-reads store.json and connects on the new network.
-            `./start.sh &`,
-            `BPID=$!`,
-            `EXPECTED='${network}'`,
-            `while kill -0 "$BPID" 2>/dev/null; do`,
-            `  sleep 15`,
-            `  CURRENT=$(sed -n 's/.*"network"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' /mnt/node/store.json 2>/dev/null)`,
-            `  if [ -n "$CURRENT" ] && [ "$CURRENT" != "$EXPECTED" ]; then`,
-            `    echo "[net-monitor] BCHN network changed $EXPECTED -> $CURRENT -- restarting Explorer"`,
-            `    NPID=$(cat /backend/package/bch-explorer.pid 2>/dev/null)`,
-            `    [ -n "$NPID" ] && kill -9 "$NPID" 2>/dev/null`,
-            `    kill "$BPID" 2>/dev/null`,
-            `    wait "$BPID" 2>/dev/null`,
-            `    exit 1`,
-            `  fi`,
-            `done`,
-            `wait "$BPID"; exit $?`,
+            `exec ./start.sh`,
           ].join('\n'),
         ],
         env: {
