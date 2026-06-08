@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: write
-  packages: read
+  packages: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -67,10 +67,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull explorer images
+      - name: Pull and label explorer images
         run: |
-          docker pull ghcr.io/bitcoincash1/bch-explorer-frontend:${{ steps.upstream.outputs.UPSTREAM_TAG }}
-          docker pull ghcr.io/bitcoincash1/bch-explorer-backend:${{ steps.upstream.outputs.UPSTREAM_TAG }}
+          UPSTREAM_TAG="${{ steps.upstream.outputs.UPSTREAM_TAG }}"
+          SOURCE_URL="https://github.com/BitcoinCash1/bch-explorer-startos"
+          for img in bch-explorer-frontend bch-explorer-backend; do
+            docker pull "ghcr.io/bitcoincash1/${img}:${UPSTREAM_TAG}"
+            docker buildx imagetools create \
+              --tag "ghcr.io/bitcoincash1/${img}:${UPSTREAM_TAG}" \
+              --annotation "index:org.opencontainers.image.source=${SOURCE_URL}" \
+              "ghcr.io/bitcoincash1/${img}:${UPSTREAM_TAG}"
+          done
 
       - name: Build service packages
         run: |
