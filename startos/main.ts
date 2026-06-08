@@ -228,10 +228,31 @@ p('/backend/package/api/statistics/statistics.js',
         // causing "Another mempool nodejs process is already running" + EADDRINUSE on
         // every subsequent restart attempt. Fix: kill the zombie and clear its lock.
         command: ['sh', '-c',
-          'rm -f /backend/package/bch-explorer.pid 2>/dev/null; ' +
-          'STALE=$(ss -tlnp 2>/dev/null | grep ":8999 " | sed "s/.*pid=//;s/,.*//"); ' +
-          'if [ -n "$STALE" ]; then echo "[startup] killing stale backend PID $STALE"; kill -9 $STALE 2>/dev/null || true; sleep 1; fi; ' +
-          './start.sh',
+          [
+            // Cleanup stale state from previous run
+            `rm -f /backend/package/bch-explorer.pid 2>/dev/null`,
+            `STALE=$(ss -tlnp 2>/dev/null | grep ":8999 " | sed "s/.*pid=//;s/,.*//")`,
+            `if [ -n "$STALE" ]; then echo "[startup] killing stale backend PID $STALE"; kill -9 "$STALE" 2>/dev/null || true; sleep 1; fi`,
+            // Start backend in background; monitor BCHN network every 15s.
+            // When BCHN switches networks, exit code 1 triggers a full SDK restart
+            // so main.ts re-reads store.json and connects on the new network.
+            `./start.sh &`,
+            `BPID=$!`,
+            `EXPECTED='${network}'`,
+            `while kill -0 "$BPID" 2>/dev/null; do`,
+            `  sleep 15`,
+            `  CURRENT=$(sed -n 's/.*"network"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' /mnt/node/store.json 2>/dev/null)`,
+            `  if [ -n "$CURRENT" ] && [ "$CURRENT" != "$EXPECTED" ]; then`,
+            `    echo "[net-monitor] BCHN network changed $EXPECTED -> $CURRENT -- restarting Explorer"`,
+            `    NPID=$(cat /backend/package/bch-explorer.pid 2>/dev/null)`,
+            `    [ -n "$NPID" ] && kill -9 "$NPID" 2>/dev/null`,
+            `    kill "$BPID" 2>/dev/null`,
+            `    wait "$BPID" 2>/dev/null`,
+            `    exit 1`,
+            `  fi`,
+            `done`,
+            `wait "$BPID"; exit $?`,
+          ].join('\n'),
         ],
         env: {
           EXPLORER_BACKEND: 'electrum',
