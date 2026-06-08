@@ -10,7 +10,7 @@ export const manifest = setupManifest({
   marketingUrl: 'https://bchexplorer.cash',
   donationUrl: null,
   docsUrls: [
-    'https://github.com/BitcoinCash1/bch-explorer-startos/blob/master/docs/instructions.md',
+    'https://github.com/BitcoinCash1/bch-explorer-startos/blob/master/instructions.md',
     'https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer',
   ],
   description: { short, long },
