@@ -24,9 +24,9 @@ StartOS.
 BCH Explorer requires two dependencies, both fully synced:
 
 1. **A Bitcoin Cash full node** (one of):
-   - **Bitcoin Cash Node (BCHN)** — recommended.
-   - **Bitcoin Cash Daemon (BCHD)**.
-   - **Flowee the Hub**.
+   - **Bitcoin Cash Node (BCHN)**
+   - **Bitcoin Cash Daemon (BCHD)**
+   - **Flowee the Hub**
 
 2. **Fulcrum** — provides the Electrum index for address and transaction history.
 
@@ -72,8 +72,8 @@ from the dependency volumes automatically.
   Expect several hours of IBD (node) plus several hours of indexing (Fulcrum) on first use.
 - Mining pool logos and the price chart require outbound clearnet access configured
   via the Outbound Proxy setting.
-- Database and explorer cache data are not included in backups. After a restore,
-  the database repopulates automatically as the backend services come back up.
+- StartOS backups include a full `mysqldump` of the MariaDB explorer database and
+  all application data. A restore fully recovers indexed chain data without re-syncing.
 - Uninstalling BCH Explorer permanently deletes all cached explorer data and the
   MariaDB database.
 
