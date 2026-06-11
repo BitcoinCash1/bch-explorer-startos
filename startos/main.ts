@@ -83,14 +83,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
     network = store2.network as NetworkId
   }
 
-  // BCHN remaps its RPC port per network to avoid clashing with its own ZMQ ports.
-  // All other supported nodes (BCHD, Flowee, Knuth) listen on 8332 for every network.
-  if (nodePackageId === 'bitcoincashd') {
-    const bitcoincashdRpcPorts: Record<string, string> = {
-      mainnet: '8332', testnet3: '18332', testnet4: '28342',
+  // Both BCHN and Flowee remap RPC port per network. BCHD and Knuth always use 8332.
+  // Flowee uses 'testnet' while BCHN uses 'testnet3' for the same network — both covered.
+  if (nodePackageId === 'bitcoincashd' || nodePackageId === 'flowee') {
+    const perNetworkRpcPorts: Record<string, string> = {
+      mainnet: '8332', testnet3: '18332', testnet: '18332', testnet4: '28342',
       scalenet: '38332', chipnet: '48332', regtest: '18443',
     }
-    nodeRpcPort = bitcoincashdRpcPorts[network] ?? '8332'
+    nodeRpcPort = perNetworkRpcPorts[network] ?? '8332'
   }
 
   // Fix cache directory permissions — the volume subpath is created with restrictive
