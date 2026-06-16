@@ -277,11 +277,13 @@ p('/backend/package/api/statistics/statistics.js',
       },
       ready: {
         display: 'API',
-        fn: async () =>
-          sdk.healthCheck.checkPortListening(effects, 8999, {
-            successMessage: 'BCH Explorer API is ready',
+        fn: async () => {
+          const backendLabel = network
+          return sdk.healthCheck.checkPortListening(effects, 8999, {
+            successMessage: `BCH Explorer API ready — ${backendLabel}`,
             errorMessage: 'BCH Explorer API is starting...',
-          }),
+          })
+        },
       },
       requires: ['db'],
     })
@@ -423,11 +425,13 @@ p('/backend/package/api/statistics/statistics.js',
       },
       ready: {
         display: 'Web UI',
-        fn: async () =>
-          sdk.healthCheck.checkPortListening(effects, webPort, {
-            successMessage: 'BCH Explorer is ready',
+        fn: async () => {
+          const backendLabel = network
+          return sdk.healthCheck.checkPortListening(effects, webPort, {
+            successMessage: `BCH Explorer ready — ${backendLabel}`,
             errorMessage: 'BCH Explorer web UI is starting...',
-          }),
+          })
+        },
       },
       requires: ['api'],
     })
