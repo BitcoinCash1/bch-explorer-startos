@@ -46,5 +46,10 @@ export const selectNode = sdk.Action.withInput(
       nodePackageId: input.nodePackageId,
       nodeConfirmed: true,
     })
+    // main.ts reads nodePackageId once at startup (.once()), so re-run it now to
+    // mount the newly-selected node and pick up its network — otherwise the
+    // running backend stays stranded on the previous node (which may have been
+    // removed). Mirrors BCHN's reindex actions: merge store, then restart.
+    await effects.restart()
   },
 )
