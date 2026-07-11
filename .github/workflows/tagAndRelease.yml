@@ -68,7 +68,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Initialize packaging workspace
-        run: start-cli s9pk init-workspace
+        run: start-cli s9pk init-workspace 2>/dev/null || true
         shell: bash
 
       - name: Pull explorer images
