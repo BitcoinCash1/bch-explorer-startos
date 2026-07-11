@@ -67,6 +67,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Initialize packaging workspace
+        run: start-cli s9pk init-workspace
+        shell: bash
+
       - name: Pull explorer images
         run: |
           docker pull ghcr.io/bitcoincash1/bch-explorer-frontend:${{ steps.upstream.outputs.UPSTREAM_TAG }}
