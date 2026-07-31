@@ -3,7 +3,7 @@ name: Tag and Release
 on:
   push:
     branches: ['master']
-    paths-ignore: ['README.md']
+    paths-ignore: ['*.md']
   repository_dispatch:
     types: [upstream-release]
 
@@ -23,7 +23,7 @@ jobs:
         uses: start9labs/shared-workflows/.github/actions/setup-build-env@master
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -61,11 +61,15 @@ jobs:
         shell: bash
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Initialize packaging workspace
+        run: start-cli s9pk init-workspace 2>/dev/null || true
+        shell: bash
 
       - name: Pull explorer images
         run: |
@@ -113,7 +117,7 @@ jobs:
           git push origin -f "${{ steps.meta.outputs.tag }}"
 
       - name: Publish versioned release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.title }} ${{ steps.meta.outputs.version }}

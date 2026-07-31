@@ -1,3 +1,4 @@
+import { FileHelper } from '@start9labs/start-sdk'
 import { sdk } from './sdk'
 import { webPort, dbPort } from './utils'
 import { storeJson } from './file-models/store.json'
@@ -9,16 +10,12 @@ export const main = sdk.setupMain(async ({ effects }) => {
   const store = await storeJson.read().once()
   const dbPassword = store?.dbPassword ?? 'explorer'
   const nodePackageId = store?.nodePackageId ?? 'bitcoincashd'
-  const network = (store?.network ?? 'mainnet') as
-    | 'mainnet'
-    | 'testnet4'
-    | 'chipnet'
-    | 'scalenet'
   const nodeHost = `${nodePackageId}.startos`
   // BCHD serves RPC over native TLS; the plaintext stunnel proxy on port 8334
   // forwards to its TLS RPC on 8332 internally. Melroy's backend has no TLS
   // support for CORE_RPC, so we route through the proxy when bchd is selected.
-  const nodeRpcPort = nodePackageId === 'bchd' ? '8334' : '8332'
+  // nodeRpcPort for BCHN is network-dependent and will be resolved after reading the node store.
+  let nodeRpcPort = nodePackageId === 'bchd' ? '8334' : '8332'
 
   // Always connect to Fulcrum BCH for Electrum indexing
   const electrumHost = 'fulcrum-bch.startos'
@@ -45,21 +42,55 @@ export const main = sdk.setupMain(async ({ effects }) => {
     'api-sub',
   )
 
-  // Read node RPC credentials from the mounted dependency volume inside the subcontainer
+  // Read node RPC credentials and network from the mounted dependency volume.
+  // Network is derived from the node — it is the single source of truth.
+  // Double-read with a 5 s gap: LXC bind-mounts take a few seconds to propagate
+  // after the subcontainer is created, so the first read can return stale data
+  // (e.g. flowee "chipnet") even when the configured dependency is bitcoincashd "mainnet".
+  // The settled value is used for both the DB subpath mount and the API env.
   let nodeUser = nodePackageId
   let nodePass = ''
-  try {
-    const result = await apiSub.exec(['cat', '/mnt/node/store.json'])
-    if (result.exitCode === 0) {
-      const nodeStore = JSON.parse(result.stdout.toString()) as {
-        rpcUser?: string
-        rpcPassword?: string
+  type NetworkId = 'mainnet' | 'testnet4' | 'chipnet' | 'scalenet'
+  let network: NetworkId = 'mainnet'
+  const readNodeStore = async () => {
+    try {
+      const result = await apiSub.exec(['cat', '/mnt/node/store.json'])
+      if (result.exitCode === 0) {
+        return JSON.parse(result.stdout.toString()) as {
+          rpcUser?: string
+          rpcPassword?: string
+          network?: string
+        }
       }
-      nodeUser = nodeStore.rpcUser ?? nodeUser
-      nodePass = nodeStore.rpcPassword ?? nodePass
+    } catch {}
+    return null
+  }
+  const store1 = await readNodeStore()
+  if (store1) {
+    nodeUser = store1.rpcUser ?? nodeUser
+    nodePass = store1.rpcPassword ?? nodePass
+    if (store1.network) network = store1.network as NetworkId
+  } else {
+    console.warn('[node-store] Could not read store.json (attempt 1) — using defaults')
+  }
+  // Wait for LXC bind-mount to propagate (observed delay: 10-15 s; 20 s is conservative).
+  await new Promise<void>(r => setTimeout(r, 20_000))
+  const store2 = await readNodeStore()
+  if (store2?.network) {
+    if (store2.network !== network) {
+      console.log(`[node-store] Network settled to '${store2.network}' (was '${network}' on first read)`)
     }
-  } catch {
-    console.warn('Could not read node store.json — using defaults')
+    network = store2.network as NetworkId
+  }
+
+  // Both BCHN and Flowee remap RPC port per network. BCHD and Knuth always use 8332.
+  // Flowee uses 'testnet' while BCHN uses 'testnet3' for the same network — both covered.
+  if (nodePackageId === 'bitcoincashd' || nodePackageId === 'flowee') {
+    const perNetworkRpcPorts: Record<string, string> = {
+      mainnet: '8332', testnet3: '18332', testnet: '18332', testnet4: '28342',
+      scalenet: '38332', chipnet: '48332', regtest: '18443',
+    }
+    nodeRpcPort = perNetworkRpcPorts[network] ?? '8332'
   }
 
   // Fix cache directory permissions — the volume subpath is created with restrictive
@@ -139,19 +170,54 @@ p('/backend/package/api/statistics/statistics.js',
   'memPoolArray.filter((tx) => tx.feePerSize != null)');`,
   ])
 
+  // [flowee-shim] Flowee's getblock/getrawtransaction only accept boolean verbose, not
+  // integer verbosity levels (0/1/2) or extra parameters. Monkey-patch Client.prototype
+  // at require-hook time so ALL call sites are fixed without touching individual files.
+  // For verbosity=2 (full tx data), hydrate each transaction from getRawTransaction.
+  if (nodePackageId === 'flowee') {
+    const hookSrc = `(function(){var coinbaseTxids=new Set();try{var m=require('/backend/package/rpc-api/index'),C=m.Client;if(C.prototype.__floweePatched)return;C.prototype.__floweePatched=true;var _gb=C.prototype.getBlock;C.prototype.getBlock=function(hash,verbosity,patterns){var flv=(verbosity===0||verbosity===false)?false:true,needHydrate=(verbosity===2),self=this,p=_gb.call(self,hash,flv);if(!needHydrate)return p;return p.then(function(b){if(!b||!Array.isArray(b.tx)||!b.tx.length||typeof b.tx[0]!=='string')return b;coinbaseTxids.add(b.tx[0]);return Promise.all(b.tx.map(function(txid,i){return self.getRawTransaction(txid,true).then(function(tx){if(i===0&&tx&&tx.vin&&tx.vin[0]&&!tx.vin[0].coinbase){tx=Object.assign({},tx);tx.vin=[Object.assign({},tx.vin[0],{coinbase:'0000'})];}return tx;}).catch(function(){return{txid:txid};});})).then(function(txs){return Object.assign({},b,{tx:txs});});});};var _rt=C.prototype.getRawTransaction;C.prototype.getRawTransaction=function(txid,verbosity){var flv=(verbosity===0||verbosity===false)?false:true;return _rt.call(this,txid,flv).catch(function(e){var msg=(e&&(e.message||String(e)))||'';if(/no such mempool|transaction not found/i.test(msg)){console.warn('[flowee-shim] getrawtransaction fallback for',txid);var isCb=coinbaseTxids.has(txid);return{txid:txid,hash:txid,version:1,size:0,vsize:0,weight:0,locktime:0,vin:isCb?[{coinbase:'0000',sequence:4294967295}]:[{txid:'0000000000000000000000000000000000000000000000000000000000000000',vout:0,scriptsig:'',scriptsig_asm:'',sequence:4294967295,witness:[]}],vout:[],hex:'',fee:0,status:{confirmed:true,block_height:0,block_hash:''},time:0,blocktime:0};}throw e;});};var _grm=C.prototype.getRawMemPool;C.prototype.getRawMemPool=function(verbose){if(verbose==null)return _grm.call(this);return _grm.call(this,verbose);};console.log('[flowee-shim] Client patched (getBlock+getRawTransaction+getRawMemPool)');}catch(e){console.error('[flowee-shim] error:',e.message);}try{var B=require('/backend/package/api/blocks');var blk=B&&(B.default||B);if(blk&&typeof blk.$getTransactionsExtended==='function'&&!blk.__floweeBlocksPatched){blk.__floweeBlocksPatched=true;var _gte=blk.$getTransactionsExtended.bind(blk);blk.$getTransactionsExtended=async function(){try{return await _gte.apply(blk,arguments);}catch(e2){var em=(e2&&e2.message)||'';if(/Expected first tx.*coinbase|Expected a coinbase tx/i.test(em)){console.warn('[flowee-shim] coinbase check suppressed; using minimal coinbase placeholder');var bt=arguments[2]||0;return[{txid:'0000000000000000000000000000000000000000000000000000000000000000',hash:'0000000000000000000000000000000000000000000000000000000000000000',version:1,size:0,vsize:0,weight:0,locktime:0,vin:[{is_coinbase:true,txid:'',vout:0,prevout:null,scriptsig:'',scriptsig_asm:'',sequence:4294967295,witness:[]}],vout:[],fee:0,status:{confirmed:true,block_height:0,block_hash:''},blockTime:bt}];}throw e2;}};console.log('[flowee-shim] Blocks.$getTransactionsExtended patched');}}catch(eB){console.warn('[flowee-shim] blocks patch:',eB.message);}})();`
+    await FileHelper.string({
+      base: sdk.volumes.main,
+      subpath: '/cache/flowee-require-hook.js',
+    }).write(effects, hookSrc)
+  }
+
+  const dbSub = await sdk.SubContainer.of(
+    effects,
+    { imageId: 'db' },
+    sdk.Mounts.of().mountVolume({
+      volumeId: 'db',
+      subpath: `/${network}`,
+      mountpoint: '/var/lib/mysql',
+      readonly: false,
+    }),
+    'db-sub',
+  )
+
+  // Monitor BCHN's network every 15s. When it changes, call effects.restart() to
+  // re-execute main.ts so it remounts the correct DB directory and passes the right
+  // EXPLORER_NETWORK env to the backend. This is the ONLY mechanism that re-runs
+  // main.ts — daemon exit code 1 only restarts the daemon, not the full service.
+  let netMonitorActive = true
+  ;(async () => {
+    while (netMonitorActive) {
+      await new Promise<void>(r => setTimeout(r, 15_000))
+      if (!netMonitorActive) break
+      try {
+        const s = await readNodeStore()
+        if (s?.network && s.network !== network) {
+          console.log(`[net-monitor] BCHN network changed ${network} -> ${s.network} — restarting service`)
+          netMonitorActive = false
+          await effects.restart()
+          return
+        }
+      } catch {}
+    }
+  })().catch(() => {})
+
   return sdk.Daemons.of(effects)
     .addDaemon('db', {
-      subcontainer: await sdk.SubContainer.of(
-        effects,
-        { imageId: 'db' },
-        sdk.Mounts.of().mountVolume({
-          volumeId: 'db',
-          subpath: null,
-          mountpoint: '/var/lib/mysql',
-          readonly: false,
-        }),
-        'db-sub',
-      ),
+      subcontainer: dbSub,
       exec: {
         command: sdk.useEntrypoint(['--bind-address=127.0.0.1']),
         env: {
@@ -175,7 +241,16 @@ p('/backend/package/api/statistics/statistics.js',
     .addDaemon('api', {
       subcontainer: apiSub,
       exec: {
-        command: ['./start.sh'],
+        // Clean up stale state from a previous run: PID file and port 8999.
+        // Network monitoring is now in main.ts (effects.restart() for proper service restart).
+        command: ['sh', '-c',
+          [
+            `rm -f /backend/package/bch-explorer.pid 2>/dev/null`,
+            `STALE=$(ss -tlnp 2>/dev/null | grep ":8999 " | sed "s/.*pid=//;s/,.*//")`,
+            `if [ -n "$STALE" ]; then echo "[startup] killing stale backend PID $STALE"; kill -9 "$STALE" 2>/dev/null || true; sleep 1; fi`,
+            `exec ./start.sh`,
+          ].join('\n'),
+        ],
         env: {
           EXPLORER_BACKEND: 'electrum',
           EXPLORER_NETWORK: network,
@@ -195,15 +270,20 @@ p('/backend/package/api/statistics/statistics.js',
           STATISTICS_ENABLED: 'true',
           EXPLORER_AUDIT: 'true',
           EXPLORER_GOGGLES_INDEXING: 'true',
+          ...(nodePackageId === 'flowee'
+            ? { NODE_OPTIONS: '--require /backend/cache/flowee-require-hook.js' }
+            : {}),
         },
       },
       ready: {
         display: 'API',
-        fn: async () =>
-          sdk.healthCheck.checkPortListening(effects, 8999, {
-            successMessage: 'BCH Explorer API is ready',
+        fn: async () => {
+          const backendLabel = network
+          return sdk.healthCheck.checkPortListening(effects, 8999, {
+            successMessage: `BCH Explorer API ready — ${backendLabel}`,
             errorMessage: 'BCH Explorer API is starting...',
-          }),
+          })
+        },
       },
       requires: ['db'],
     })
@@ -241,6 +321,44 @@ p('/backend/package/api/statistics/statistics.js',
             `|| echo "[frontend-shim] mining-pools proxy sed failed"; ` +
           `else echo "[frontend-shim] mining-pools proxy already present"; fi`,
         ])
+        // Add nginx location blocks for non-mainnet networks.
+        // The nginx template only has mainnet /api/ routes; on chipnet/testnet4/scalenet
+        // the Angular frontend calls /chipnet/api/... paths which have no proxy → 502.
+        // We reuse the __PLACEHOLDER__ vars from the mainnet blocks so the entrypoint's
+        // sed pass replaces them with the real backend host/port at startup.
+        await webSub.exec([
+          'sh', '-c',
+          [
+            `CONF=/etc/nginx/conf.d/nginx-explorer.conf`,
+            `MARKER='# startos-network-routes'`,
+            `if grep -qF "$MARKER" "$CONF" 2>/dev/null; then echo "[network-routes] already patched"; exit 0; fi`,
+            `echo '# non-mainnet: all routed to same backend (EXPLORER_NETWORK env sets chain)' >> "$CONF"`,
+            `echo 'location ~ ^/(chipnet|testnet4|scalenet|testnet3|regtest)/api/v1/ws$ {' >> "$CONF"`,
+            `echo '    rewrite ^/[^/]+(/api/v1/ws)$ $1 break;' >> "$CONF"`,
+            `echo '    proxy_pass http://__EXPLORER_BACKEND_MAINNET_HTTP_HOST__:__EXPLORER_BACKEND_MAINNET_HTTP_PORT__;' >> "$CONF"`,
+            `echo '    proxy_http_version 1.1;' >> "$CONF"`,
+            `echo '    proxy_set_header Upgrade $http_upgrade;' >> "$CONF"`,
+            `echo '    proxy_set_header Connection "Upgrade";' >> "$CONF"`,
+            `echo '}' >> "$CONF"`,
+            `echo 'location ~ ^/(chipnet|testnet4|scalenet|testnet3|regtest)/ws$ {' >> "$CONF"`,
+            `echo '    rewrite ^/[^/]+(/ws)$ $1 break;' >> "$CONF"`,
+            `echo '    proxy_pass http://__EXPLORER_BACKEND_MAINNET_HTTP_HOST__:__EXPLORER_BACKEND_MAINNET_HTTP_PORT__;' >> "$CONF"`,
+            `echo '    proxy_http_version 1.1;' >> "$CONF"`,
+            `echo '    proxy_set_header Upgrade $http_upgrade;' >> "$CONF"`,
+            `echo '    proxy_set_header Connection "Upgrade";' >> "$CONF"`,
+            `echo '}' >> "$CONF"`,
+            `echo 'location ~ ^/(chipnet|testnet4|scalenet|testnet3|regtest)/api/v1/(.*)$ {' >> "$CONF"`,
+            `echo '    rewrite ^/[^/]+/api/v1/(.*)$ /api/v1/$1 break;' >> "$CONF"`,
+            `echo '    proxy_pass http://__EXPLORER_BACKEND_MAINNET_HTTP_HOST__:__EXPLORER_BACKEND_MAINNET_HTTP_PORT__;' >> "$CONF"`,
+            `echo '}' >> "$CONF"`,
+            `echo 'location ~ ^/(chipnet|testnet4|scalenet|testnet3|regtest)/api/(.*)$ {' >> "$CONF"`,
+            `echo '    rewrite ^/[^/]+/api/(.*)$ /api/v1/$1 break;' >> "$CONF"`,
+            `echo '    proxy_pass http://__EXPLORER_BACKEND_MAINNET_HTTP_HOST__:__EXPLORER_BACKEND_MAINNET_HTTP_PORT__;' >> "$CONF"`,
+            `echo '}' >> "$CONF"`,
+            `echo "$MARKER" >> "$CONF"`,
+            `echo "[network-routes] added multi-network nginx location blocks"`,
+          ].join('\n'),
+        ])
         await webSub.exec([
           'sh', '-c',
           [
@@ -275,6 +393,8 @@ p('/backend/package/api/statistics/statistics.js',
           MAINNET_ENABLED: network === 'mainnet' ? 'true' : 'false',
           TESTNET_ENABLED: 'false',
           TESTNET4_ENABLED: network === 'testnet4' ? 'true' : 'false',
+          CHIPNET_ENABLED: network === 'chipnet' ? 'true' : 'false',
+          SCALENET_ENABLED: network === 'scalenet' ? 'true' : 'false',
           SIGNET_ENABLED: 'false',
           ITEMS_PER_PAGE: '10',
           KEEP_BLOCKS_AMOUNT: '8',
@@ -305,11 +425,13 @@ p('/backend/package/api/statistics/statistics.js',
       },
       ready: {
         display: 'Web UI',
-        fn: async () =>
-          sdk.healthCheck.checkPortListening(effects, webPort, {
-            successMessage: 'BCH Explorer is ready',
+        fn: async () => {
+          const backendLabel = network
+          return sdk.healthCheck.checkPortListening(effects, webPort, {
+            successMessage: `BCH Explorer ready — ${backendLabel}`,
             errorMessage: 'BCH Explorer web UI is starting...',
-          }),
+          })
+        },
       },
       requires: ['api'],
     })
