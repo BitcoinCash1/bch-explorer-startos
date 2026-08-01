@@ -1,21 +1,25 @@
 {
-  "name": "bch-explorer",
+  "name": "bch-explorer-startos",
   "scripts": {
     "build": "rm -rf ./javascript && ncc build startos/index.ts -o ./javascript",
     "prettier": "prettier --write startos",
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@start9labs/start-sdk": "1.5.3",
-    "bitcoin-cash-node-startos": "git+https://github.com/BitcoinCash1/bitcoin-cash-node-startos.git#master",
-    "bitcoin-cash-daemon-startos": "git+https://github.com/BitcoinCash1/bitcoin-cash-daemon-startos.git#master",
-    "flowee-startos": "git+https://github.com/BitcoinCash1/flowee-the-hub-startos.git#master"
+    "@start9labs/start-sdk": "2.0.9",
+    "bitcoin-cash-daemon-startos": "github:Start9-Community/bitcoin-cash-daemon-startos#next",
+    "bitcoin-cash-node-startos": "github:Start9-Community/bitcoin-cash-node-startos#next",
+    "flowee-startos": "github:Start9-Community/flowee-the-hub-startos#next",
+    "fulcrum-bch-startos": "github:Start9-Community/fulcrum-bch-startos#next"
+  },
+  "overrides": {
+    "@start9labs/start-sdk": "$@start9labs/start-sdk"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
     "@vercel/ncc": "^0.38.4",
     "prettier": "^3.6.2",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "prettier": {
     "trailingComma": "all",

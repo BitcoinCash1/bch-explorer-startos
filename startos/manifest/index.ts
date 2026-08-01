@@ -1,33 +1,34 @@
 import { setupManifest } from '@start9labs/start-sdk'
-import { long, short } from './i18n'
+import {
+  bchdDescription,
+  bchnDescription,
+  floweeDescription,
+  fulcrumDescription,
+  long,
+  short,
+} from './i18n'
 
 export const manifest = setupManifest({
   id: 'bch-explorer',
   title: 'BCH Explorer',
   license: 'MIT',
-  packageRepo: 'https://github.com/BitcoinCash1/bch-explorer-startos',
+  packageRepo: 'https://github.com/Start9-Community/bch-explorer-startos',
   upstreamRepo: 'https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer',
   marketingUrl: 'https://bchexplorer.cash',
   donationUrl: null,
-  docsUrls: [
-    'https://github.com/BitcoinCash1/bch-explorer-startos/blob/master/instructions.md',
-    'https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer',
-  ],
   description: { short, long },
   volumes: ['main', 'db'],
   images: {
     frontend: {
       source: {
-        dockerTag:
-          'ghcr.io/bitcoincash1/bch-explorer-frontend:3.12.0',
+        dockerTag: 'ghcr.io/bitcoincash1/bch-explorer-frontend:3.12.0',
       },
       arch: ['x86_64'],
       emulateMissingAs: 'x86_64',
     },
     backend: {
       source: {
-        dockerTag:
-          'ghcr.io/bitcoincash1/bch-explorer-backend:3.12.0',
+        dockerTag: 'ghcr.io/bitcoincash1/bch-explorer-backend:3.12.0',
       },
       arch: ['x86_64'],
       emulateMissingAs: 'x86_64',
@@ -38,52 +39,37 @@ export const manifest = setupManifest({
       emulateMissingAs: 'x86_64',
     },
   },
-  alerts: {
-    install:
-      'BCH Explorer requires both Bitcoin Cash Node and Fulcrum BCH to be installed and synced. The database will be populated automatically on first start.\n\n' +
-      'For mining-pool logos and BCH/USD price history to populate, BCH Explorer needs outbound clearnet access. After install, in StartOS go to Services → BCH Explorer → Outbound Proxy and set it to your clearnet gateway (e.g. enp1s0 / eth0). Without this, the mining-pool dashboard logos and price chart will appear blank.',
-    update: null,
-    uninstall:
-      'Uninstalling BCH Explorer will permanently delete all cached explorer data and the database.',
-    restore: null,
-    start: null,
-    stop: null,
-  },
   dependencies: {
     bitcoincashd: {
-      description:
-        'Bitcoin Cash Node — C++ full node. Provides blockchain RPC data to the explorer.',
+      description: bchnDescription,
       optional: true,
       metadata: {
         title: 'Bitcoin Cash Node',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/bitcoin-cash-node-startos/master/icon.png',
+        icon: 'https://raw.githubusercontent.com/Start9-Community/bitcoin-cash-node-startos/master/icon.png',
       },
     },
     bchd: {
-      description:
-        'BCHD — Go-based full node. An alternative to Bitcoin Cash Node for providing RPC data.',
+      description: bchdDescription,
       optional: true,
       metadata: {
         title: 'Bitcoin Cash Daemon',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/bitcoin-cash-daemon-startos/master/icon.png',
+        icon: 'https://raw.githubusercontent.com/Start9-Community/bitcoin-cash-daemon-startos/master/icon.png',
       },
     },
     flowee: {
-      description:
-        'Flowee the Hub — Fast BCH validator with SPV-level security. An alternative node for providing RPC data.',
+      description: floweeDescription,
       optional: true,
       metadata: {
         title: 'Flowee the Hub',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/flowee-the-hub-startos/master/icon.png',
+        icon: 'https://raw.githubusercontent.com/Start9-Community/flowee-the-hub-startos/master/icon.png',
       },
     },
     'fulcrum-bch': {
-      description:
-        'Fulcrum BCH provides the Electrum index required for address lookups and transaction history.',
+      description: fulcrumDescription,
       optional: false,
       metadata: {
         title: 'Fulcrum BCH',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/fulcrum-bch-startos/master/icon.png',
+        icon: 'https://raw.githubusercontent.com/Start9-Community/fulcrum-bch-startos/master/icon.png',
       },
     },
   },

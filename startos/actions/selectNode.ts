@@ -1,55 +1,84 @@
+import { createDependentCredential } from 'flowee-startos/startos/actions/credentials/dependentCredential'
+import { storeJson } from '../fileModels/store.json'
+import { i18n } from '../i18n'
 import { sdk } from '../sdk'
-import { storeJson } from '../file-models/store.json'
 
 const { InputSpec, Value } = sdk
-
-const nodeInputSpec = InputSpec.of({
-  nodePackageId: Value.select({
-    name: 'Node Backend',
-    description: 'Select which BCH full node the explorer should connect to.',
-    default: 'bitcoincashd',
-    values: {
-      bitcoincashd: 'Bitcoin Cash Node',
-      bchd: 'Bitcoin Cash Daemon',
-      flowee: 'Flowee the Hub',
-      'knuth-bch': 'Knuth',
-    },
-  }),
-})
 
 export const selectNode = sdk.Action.withInput(
   'select-node',
 
-  {
-    name: 'Select Node Backend',
-    description:
-      'Choose which BCH node package this explorer should use for RPC data.',
-    warning:
-      'Changing the node package may require dependency reconfiguration and service restart.',
+  async () => ({
+    name: i18n('Select Node Backend'),
+    description: i18n(
+      'Choose which Bitcoin Cash node the explorer reads chain data from.',
+    ),
+    warning: i18n(
+      'The explorer restarts and re-indexes against the new node, which takes a while.',
+    ),
     allowedStatuses: 'any',
     group: null,
     visibility: 'enabled',
-  },
+  }),
 
-  nodeInputSpec,
+  InputSpec.of({
+    nodePackageId: Value.select({
+      name: i18n('Node Backend'),
+      description: i18n(
+        'The node must be installed and fully synced before the explorer can use it.',
+      ),
+      default: 'bitcoincashd',
+      values: {
+        bitcoincashd: i18n('Bitcoin Cash Node'),
+        bchd: i18n('Bitcoin Cash Daemon'),
+        flowee: i18n('Flowee the Hub'),
+      },
+    }),
+  }),
 
-  async ({ effects }) => {
-    const store = await storeJson.read().once()
-    const nodePackageId = store?.nodePackageId ?? 'bitcoincashd'
-    return {
-      nodePackageId: nodePackageId as 'bitcoincashd' | 'bchd' | 'flowee' | 'knuth-bch',
-    }
-  },
+  async () => ({
+    nodePackageId:
+      (await storeJson.read().once())?.nodePackageId ?? 'bitcoincashd',
+  }),
 
   async ({ effects, input }) => {
+    // `main` reads this selection through a `.const()`, so writing it here is
+    // what restarts the explorer against the new node.
     await storeJson.merge(effects, {
       nodePackageId: input.nodePackageId,
       nodeConfirmed: true,
     })
-    // main.ts reads nodePackageId once at startup (.once()), so re-run it now to
-    // mount the newly-selected node and pick up its network — otherwise the
-    // running backend stays stranded on the previous node (which may have been
-    // removed). Mirrors BCHN's reindex actions: merge store, then restart.
-    await effects.restart()
+
+    if (input.nodePackageId !== 'flowee') return
+
+    // Flowee keeps only a hash of each RPC password and cannot hand one back,
+    // so the credential this package dials it with is minted here and has to be
+    // registered there. Raised on selection rather than from
+    // `setupDependencies`, which re-runs on every init and would keep asking.
+    const store = await storeJson.read().once()
+    await sdk.action.createTask(
+      effects,
+      'flowee',
+      createDependentCredential,
+      'critical',
+      {
+        input: {
+          kind: 'partial',
+          accept: [
+            {
+              username: store?.floweeRpcUser,
+              password: store?.floweeRpcPassword,
+            },
+          ],
+          set: {
+            username: store?.floweeRpcUser,
+            password: store?.floweeRpcPassword,
+          },
+        },
+        reason: i18n(
+          'Flowee needs an RPC credential registered for BCH Explorer to log in with',
+        ),
+      },
+    )
   },
 )
