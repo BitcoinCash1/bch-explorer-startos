@@ -1,6 +1,7 @@
 import { autoconfig as bchnAutoconfig } from 'bitcoin-cash-node-startos/startos/actions/config/autoconfig'
 import { autoconfig as bchdAutoconfig } from 'bitcoin-cash-daemon-startos/startos/actions/config/autoconfig'
 import { autoconfig as floweeAutoconfig } from 'flowee-startos/startos/actions/config/autoconfig'
+import { autoconfig as knuthAutoconfig } from 'knuth-bch-startos/startos/actions/config/autoconfig'
 import { sdk } from './sdk'
 import { storeJson } from './file-models/store.json'
 
@@ -50,9 +51,20 @@ export const setDependencies = sdk.setupDependencies(async ({ effects }) => {
         when: { condition: 'input-not-matches', once: false },
       })
     } else if (nodePackageId === 'knuth-bch') {
-      // Knuth: no JSON-RPC in upstream yet — nothing meaningful to
-      // autoconfigure today. Dep is declared below; explorer will
-      // surface a clear RPC error until upstream RPC ships.
+      // Knuth v1.3.0+: enable JSON-RPC + full DB (same idea as Fulcrum).
+      await sdk.action.createTask(effects, 'knuth-bch', knuthAutoconfig, 'critical', {
+        input: {
+          kind: 'partial',
+          // @ts-ignore
+          value: {
+            databaseMode: 'full',
+            rpcEnabled: true,
+          },
+        },
+        reason:
+          'JSON-RPC must be enabled and database mode set to Full for BCH Explorer.',
+        when: { condition: 'input-not-matches', once: false },
+      })
     } else {
       // BCHN: ensure pruning off, txindex on, ZMQ on
       await sdk.action.createTask(effects, nodePackageId, bchnAutoconfig, 'critical', {
@@ -93,7 +105,7 @@ export const setDependencies = sdk.setupDependencies(async ({ effects }) => {
   } else if (nodePackageId === 'knuth-bch') {
     deps['knuth-bch'] = {
       kind: 'running',
-      versionRange: '>=0.80.0:0',
+      versionRange: '>=1.3.0:0',
       healthChecks: ['primary'],
     }
   } else {

@@ -77,6 +77,15 @@ export const manifest = setupManifest({
         icon: 'https://raw.githubusercontent.com/BitcoinCash1/flowee-the-hub-startos/master/icon.png',
       },
     },
+    'knuth-bch': {
+      description:
+        'Knuth — high-performance C++ BCH full node with optional JSON-RPC (v1.3.0+). Requires Fulcrum for address/history index.',
+      optional: true,
+      metadata: {
+        title: 'Knuth',
+        icon: 'https://raw.githubusercontent.com/BitcoinCash1/knuth-bch-startos/master/icon.svg',
+      },
+    },
     'fulcrum-bch': {
       description:
         'Fulcrum BCH provides the Electrum index required for address lookups and transaction history.',

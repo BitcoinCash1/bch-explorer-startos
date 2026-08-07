@@ -83,9 +83,10 @@ export const main = sdk.setupMain(async ({ effects }) => {
     network = store2.network as NetworkId
   }
 
-  // Both BCHN and Flowee remap RPC port per network. BCHD and Knuth always use 8332.
-  // Flowee uses 'testnet' while BCHN uses 'testnet3' for the same network — both covered.
-  if (nodePackageId === 'bitcoincashd' || nodePackageId === 'flowee') {
+  // BCHN, Flowee, and Knuth remap RPC port per network.
+  // BCHD uses the plaintext stunnel bridge on 8334 (all networks).
+  // Flowee uses 'testnet' while BCHN/Knuth use 'testnet3' — both covered.
+  if (nodePackageId !== 'bchd') {
     const perNetworkRpcPorts: Record<string, string> = {
       mainnet: '8332', testnet3: '18332', testnet: '18332', testnet4: '28342',
       scalenet: '38332', chipnet: '48332', regtest: '18443',
