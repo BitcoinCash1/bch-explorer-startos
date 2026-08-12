@@ -47,6 +47,18 @@ Changes which node the explorer reads from. Choosing a different one restarts th
 explorer and re-indexes against it, which takes a while — and you will be asked
 to answer that node's setup task afterwards.
 
+### Repair MariaDB
+
+If the **Database** health check stays on starting or reports a crash, and the
+logs say `Bad magic header in tc log` / `Can't init tc log`, MariaDB's
+transaction-coordinator log was left corrupt by an unclean shutdown or a full
+disk. StartOS **Rebuild** remakes the container but leaves that file on the
+database volume, so it will not fix this.
+
+Run **Actions → Repair MariaDB**. It deletes `tc.log` for every network on the
+database volume and restarts the explorer. Indexed chain data is not deleted.
+MariaDB recreates a clean `tc.log` on the next start.
+
 ## Limitations
 
 - **Mining-pool logos and the BCH/USD price chart are fetched from the internet.**

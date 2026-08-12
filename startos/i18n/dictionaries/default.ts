@@ -38,6 +38,15 @@ const dict = {
   // dependencies.ts
   'BCH Explorer looks up arbitrary transactions, which needs the full transaction index': 25,
   'BCH Explorer looks up arbitrary transactions, which needs an unpruned node and the full transaction index': 26,
+
+  // actions/repairMariaDb.ts
+  'Repair MariaDB': 28,
+  'Delete the MariaDB transaction-coordinator log (tc.log) and restart the explorer. Use this when the Database health check reports a crash after an unclean shutdown or a full disk (Bad magic header in tc log). Indexed explorer data is kept.': 29,
+  'The explorer will restart. Use this only if MariaDB is crash-looping on tc.log. A StartOS Rebuild does not remove that file.': 30,
+  Maintenance: 31,
+  'MariaDB repaired': 32,
+  'No tc.log was present. The explorer is restarting anyway.': 33,
+  'Removed ${count} tc.log file(s). MariaDB will recreate a clean log on startup. Indexed data was not deleted.': 34,
 } as const
 
 /**

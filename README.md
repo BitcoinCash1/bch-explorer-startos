@@ -161,9 +161,15 @@ is dialed through BCHD's plaintext proxy binding rather than its native RPC.
 | Action                  | Purpose                                            | Visibility | Availability | Input                     | Output |
 | ----------------------- | -------------------------------------------------- | ---------- | ------------ | ------------------------- | ------ |
 | **Select Node Backend** | Choose the node the explorer reads chain data from | Enabled    | Any status   | One of BCHN, BCHD, Flowee | None   |
+| **Repair MariaDB**      | Delete `tc.log` and restart after a crash-loop     | Enabled    | Any status   | None                      | Count of removed logs |
 
-Writing the selection is what restarts the explorer: `main` reads it through a
+Writing the node selection is what restarts the explorer: `main` reads it through a
 reactive `.const()` read.
+
+**Repair MariaDB** mounts the `db` volume and deletes every `tc.log` (the
+transaction-coordinator log). MariaDB refuses to start when that file has a bad
+magic header after an unclean shutdown or a full disk. A StartOS Rebuild remakes
+the container but leaves the file on the volume. Indexed explorer data is kept.
 
 ---
 
@@ -292,4 +298,5 @@ startos_managed_env_vars:
   - ROOT_NETWORK
 actions:
   - select-node
+  - repair-mariadb
 ```
