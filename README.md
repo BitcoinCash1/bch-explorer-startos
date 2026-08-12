@@ -125,6 +125,17 @@
 | `select-network` | Select Network | Choose which BCH network the explorer serves (mainnet / testnet4 / chipnet / scalenet) |
 | `select-indexer` | Select Indexer | Choose the Electrum indexer for address lookups (currently Fulcrum BCH only) |
 
+### Maintenance
+
+| Action                  | Purpose                                            | Visibility | Availability | Input | Output |
+| ----------------------- | -------------------------------------------------- | ---------- | ------------ | ----- | ------ |
+| **Repair MariaDB**      | Delete `tc.log` and restart after a crash-loop     | Enabled    | Any status   | None  | Count of removed logs |
+
+**Repair MariaDB** mounts the `db` volume and deletes every `tc.log` (the
+transaction-coordinator log). MariaDB refuses to start when that file has a bad
+magic header after an unclean shutdown or a full disk. A StartOS Rebuild remakes
+the container but leaves the file on the volume. Indexed explorer data is kept.
+
 ---
 
 ## 8. Backups and Restore
@@ -302,6 +313,7 @@ actions:
   - { id: select-node, name: "Select Node Backend", group: Configuration }
   - { id: select-network, name: "Select Network", group: Configuration }
   - { id: select-indexer, name: "Select Indexer", group: Configuration }
+  - { id: repair-mariadb, name: "Repair MariaDB", group: Maintenance }
 health_checks:
   - { id: db, display: "Database", method: "port 3306 listen check" }
   - { id: api, display: "API", method: "port 8999 listen check" }
