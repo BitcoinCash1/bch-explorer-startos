@@ -60,9 +60,9 @@ Use **Config** to set:
 No other configuration is required; the explorer discovers credentials and endpoints
 from the dependency volumes automatically.
 
-## Repair MariaDB
+### Repair MariaDB
 
-If the **Database** health check stays on "starting" or reports a crash, and the
+If the **Database** health check stays on starting or reports a crash, and the
 logs say `Bad magic header in tc log` / `Can't init tc log`, MariaDB's
 transaction-coordinator log was left corrupt by an unclean shutdown or a full
 disk. StartOS **Rebuild** remakes the container but leaves that file on the

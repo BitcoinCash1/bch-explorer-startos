@@ -127,9 +127,14 @@
 
 ### Maintenance
 
-| Action ID | Name | Description |
-|---|---|---|
-| `repair-mariadb` | Repair MariaDB | Delete `tc.log` on the db volume and restart. Use when MariaDB crash-loops after an unclean shutdown or full disk (`Bad magic header in tc log`). Indexed data is kept. A StartOS Rebuild does not remove `tc.log`. |
+| Action                  | Purpose                                            | Visibility | Availability | Input | Output |
+| ----------------------- | -------------------------------------------------- | ---------- | ------------ | ----- | ------ |
+| **Repair MariaDB**      | Delete `tc.log` and restart after a crash-loop     | Enabled    | Any status   | None  | Count of removed logs |
+
+**Repair MariaDB** mounts the `db` volume and deletes every `tc.log` (the
+transaction-coordinator log). MariaDB refuses to start when that file has a bad
+magic header after an unclean shutdown or a full disk. A StartOS Rebuild remakes
+the container but leaves the file on the volume. Indexed explorer data is kept.
 
 ---
 
@@ -308,6 +313,7 @@ actions:
   - { id: select-node, name: "Select Node Backend", group: Configuration }
   - { id: select-network, name: "Select Network", group: Configuration }
   - { id: select-indexer, name: "Select Indexer", group: Configuration }
+  - { id: repair-mariadb, name: "Repair MariaDB", group: Maintenance }
 health_checks:
   - { id: db, display: "Database", method: "port 3306 listen check" }
   - { id: api, display: "API", method: "port 8999 listen check" }

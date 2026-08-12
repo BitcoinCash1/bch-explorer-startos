@@ -1,7 +1,7 @@
 import { sdk } from '../sdk'
+import { repairMariaDb } from './repairMariaDb'
 import { selectIndexer } from './selectIndexer'
 import { selectNode } from './selectNode'
-import { repairMariaDb } from './repairMariaDb'
 
 export const actions = sdk.Actions.of()
   .addAction(selectNode)
