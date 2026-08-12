@@ -125,6 +125,12 @@
 | `select-network` | Select Network | Choose which BCH network the explorer serves (mainnet / testnet4 / chipnet / scalenet) |
 | `select-indexer` | Select Indexer | Choose the Electrum indexer for address lookups (currently Fulcrum BCH only) |
 
+### Maintenance
+
+| Action ID | Name | Description |
+|---|---|---|
+| `repair-mariadb` | Repair MariaDB | Delete `tc.log` on the db volume and restart. Use when MariaDB crash-loops after an unclean shutdown or full disk (`Bad magic header in tc log`). Indexed data is kept. A StartOS Rebuild does not remove `tc.log`. |
+
 ---
 
 ## 8. Backups and Restore
