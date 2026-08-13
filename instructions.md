@@ -61,9 +61,9 @@ MariaDB recreates a clean `tc.log` on the next start.
 
 ## Limitations
 
-- **Mining-pool logos and the BCH/USD price chart are fetched from the internet.**
-  Without outbound clearnet access both stay blank — the pool dashboard shows no
-  logos and the price chart no data. To grant it, open BCH Explorer's **Actions**
+- **Pool logos are served from this package.** Unnamed chipnet miners still
+  show the Unknown icon because they have no known coinbase tag. The **BCH/USD
+  price chart** still needs outbound clearnet: open BCH Explorer's **Actions**
   tab and use **Set Outbound Gateway** under the StartOS heading, choosing your
   clearnet gateway.
 - **A node on regtest will not work.** The explorer has no regtest interface and

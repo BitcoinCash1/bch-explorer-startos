@@ -80,18 +80,28 @@ p('/backend/package/api/statistics/statistics.js',
 export const floweeRequireHook = `(function(){var coinbaseTxids=new Set();try{var m=require('/backend/package/rpc-api/index'),C=m.Client;if(C.prototype.__floweePatched)return;C.prototype.__floweePatched=true;var _gb=C.prototype.getBlock;C.prototype.getBlock=function(hash,verbosity,patterns){var flv=(verbosity===0||verbosity===false)?false:true,needHydrate=(verbosity===2),self=this,p=_gb.call(self,hash,flv);if(!needHydrate)return p;return p.then(function(b){if(!b||!Array.isArray(b.tx)||!b.tx.length||typeof b.tx[0]!=='string')return b;coinbaseTxids.add(b.tx[0]);return Promise.all(b.tx.map(function(txid,i){return self.getRawTransaction(txid,true).then(function(tx){if(i===0&&tx&&tx.vin&&tx.vin[0]&&!tx.vin[0].coinbase){tx=Object.assign({},tx);tx.vin=[Object.assign({},tx.vin[0],{coinbase:'0000'})];}return tx;}).catch(function(){return{txid:txid};});})).then(function(txs){return Object.assign({},b,{tx:txs});});});};var _rt=C.prototype.getRawTransaction;C.prototype.getRawTransaction=function(txid,verbosity){var flv=(verbosity===0||verbosity===false)?false:true;return _rt.call(this,txid,flv).catch(function(e){var msg=(e&&(e.message||String(e)))||'';if(/no such mempool|transaction not found/i.test(msg)){console.warn('[flowee-shim] getrawtransaction fallback for',txid);var isCb=coinbaseTxids.has(txid);return{txid:txid,hash:txid,version:1,size:0,vsize:0,weight:0,locktime:0,vin:isCb?[{coinbase:'0000',sequence:4294967295}]:[{txid:'0000000000000000000000000000000000000000000000000000000000000000',vout:0,scriptsig:'',scriptsig_asm:'',sequence:4294967295,witness:[]}],vout:[],hex:'',fee:0,status:{confirmed:true,block_height:0,block_hash:''},time:0,blocktime:0};}throw e;});};var _grm=C.prototype.getRawMemPool;C.prototype.getRawMemPool=function(verbose){if(verbose==null)return _grm.call(this);return _grm.call(this,verbose);};console.log('[flowee-shim] Client patched (getBlock+getRawTransaction+getRawMemPool)');}catch(e){console.error('[flowee-shim] error:',e.message);}try{var B=require('/backend/package/api/blocks');var blk=B&&(B.default||B);if(blk&&typeof blk.$getTransactionsExtended==='function'&&!blk.__floweeBlocksPatched){blk.__floweeBlocksPatched=true;var _gte=blk.$getTransactionsExtended.bind(blk);blk.$getTransactionsExtended=async function(){try{return await _gte.apply(blk,arguments);}catch(e2){var em=(e2&&e2.message)||'';if(/Expected first tx.*coinbase|Expected a coinbase tx/i.test(em)){console.warn('[flowee-shim] coinbase check suppressed; using minimal coinbase placeholder');var bt=arguments[2]||0;return[{txid:'0000000000000000000000000000000000000000000000000000000000000000',hash:'0000000000000000000000000000000000000000000000000000000000000000',version:1,size:0,vsize:0,weight:0,locktime:0,vin:[{is_coinbase:true,txid:'',vout:0,prevout:null,scriptsig:'',scriptsig_asm:'',sequence:4294967295,witness:[]}],vout:[],fee:0,status:{confirmed:true,block_height:0,block_hash:''},blockTime:bt}];}throw e2;}};console.log('[flowee-shim] Blocks.$getTransactionsExtended patched');}}catch(eB){console.warn('[flowee-shim] blocks patch:',eB.message);}})();`
 
 /**
- * The frontend image ships no mining-pool logos, so `/resources/mining-pools/`
- * is proxied to the upstream site — a `location` block inserted ahead of the
- * image's own `/resources` block, and only if it is not already there.
+ * The 3.12 frontend image ships ~95 pool SVGs under
+ * `/resources/mining-pools/`. The old shim proxied that path to
+ * bchexplorer.cash, which now returns 403 (browser proof-of-work), so every
+ * cube showed a broken "Logo of Unknown mining pool" image. Serve the local
+ * files. Only re-add the proxy if a future image has no SVGs.
  */
-export const nginxMiningPoolsProxy =
-  `CONF=/etc/nginx/conf.d/nginx-explorer.conf; ` +
-  `MARKER='location /resources/mining-pools/'; ` +
-  `if ! grep -qF "$MARKER" "$CONF" 2>/dev/null; then ` +
-  `sed -i 's|location /resources {|location /resources/mining-pools/ {\\n\\t\\tproxy_pass https://bchexplorer.cash/resources/mining-pools/;\\n\\t\\tproxy_ssl_server_name on;\\n\\t\\texpires 7d;\\n\\t\\tadd_header Cache-Control "public";\\n\\t}\\n\\tlocation /resources {|' "$CONF" ` +
-  `&& echo "[frontend-shim] mining-pools proxy added" ` +
-  `|| echo "[frontend-shim] mining-pools proxy sed failed"; ` +
-  `else echo "[frontend-shim] mining-pools proxy already present"; fi`
+export const nginxMiningPoolsProxy = [
+  `CONF=/etc/nginx/conf.d/nginx-explorer.conf`,
+  `POOLS=/var/www/explorer/browser/resources/mining-pools`,
+  `MARKER='location /resources/mining-pools/'`,
+  `if grep -qF "$MARKER" "$CONF" 2>/dev/null; then`,
+  `  awk 'BEGIN{s=0} $0 ~ /location \\/resources\\/mining-pools\\// {s=1; next} s && /}/ {s=0; next} !s {print}' "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"`,
+  `  echo "[frontend-shim] mining-pools proxy removed"`,
+  `fi`,
+  `HAS_LOCAL=$(ls "$POOLS"/*.svg 2>/dev/null | head -1)`,
+  `if [ -n "$HAS_LOCAL" ]; then`,
+  `  echo "[frontend-shim] serving local mining-pool SVGs"`,
+  `else`,
+  `  sed -i 's|location /resources {|location /resources/mining-pools/ {\\n\\t\\tproxy_pass https://bchexplorer.cash/resources/mining-pools/;\\n\\t\\tproxy_ssl_server_name on;\\n\\t\\texpires 7d;\\n\\t\\tadd_header Cache-Control "public";\\n\\t}\\n\\tlocation /resources {|' "$CONF"`,
+  `  echo "[frontend-shim] mining-pools proxy added (no local SVGs)"`,
+  `fi`,
+].join('\n')
 
 /**
  * The image's nginx template only routes mainnet `/api/` paths. On any other
