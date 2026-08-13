@@ -38,17 +38,6 @@ export const manifest = setupManifest({
       emulateMissingAs: 'x86_64',
     },
   },
-  alerts: {
-    install:
-      'BCH Explorer requires both Bitcoin Cash Node and Fulcrum BCH to be installed and synced. The database will be populated automatically on first start.\n\n' +
-      'Pool logos are served from the package. For the BCH/USD price chart, set Services → BCH Explorer → Outbound Proxy to your clearnet gateway (e.g. enp1s0 / eth0).',
-    update: null,
-    uninstall:
-      'Uninstalling BCH Explorer will permanently delete all cached explorer data and the database.',
-    restore: null,
-    start: null,
-    stop: null,
-  },
   dependencies: {
     bitcoincashd: {
       description:
