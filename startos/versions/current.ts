@@ -1,10 +1,10 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '3.12.0:2',
+  version: '3.12.0:3',
   releaseNotes: {
     en_US:
-      'Adds a Repair MariaDB action. After an unclean shutdown or a full disk, MariaDB can crash-loop on a corrupt tc.log (Bad magic header). A StartOS Rebuild leaves that file on the database volume; this action deletes it and restarts, keeping the indexed explorer data. Also serves mining-pool logos from the frontend image instead of proxying to bchexplorer.cash (that proxy now returns 403). Address pages against Flowee work with cashaddr (including token-aware bchtest:z…). Missing Flowee prevouts no longer 500 the whole address transaction list.',
+      'Dials Flowee on the per-network RPC port (chipnet 48332) after Flowee 2026.5.3:0. Adds a Repair MariaDB action. After an unclean shutdown or a full disk, MariaDB can crash-loop on a corrupt tc.log (Bad magic header). A StartOS Rebuild leaves that file on the database volume; this action deletes it and restarts, keeping the indexed explorer data. Also serves mining-pool logos from the frontend image instead of proxying to bchexplorer.cash (that proxy now returns 403). Address pages against Flowee work with cashaddr (including token-aware bchtest:z…). Missing Flowee prevouts no longer 500 the whole address transaction list.',
     es_ES:
       'Añade la acción Reparar MariaDB. Tras un apagado sucio o un disco lleno, MariaDB puede entrar en bucle por un tc.log corrupto (Bad magic header). Un Rebuild de StartOS deja ese archivo en el volumen; esta acción lo elimina y reinicia, conservando los datos indexados. También sirve los logos de los pools desde la imagen del frontend en lugar de proxificar a bchexplorer.cash (ese proxy ahora devuelve 403).',
     de_DE:

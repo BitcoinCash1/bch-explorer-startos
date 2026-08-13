@@ -6,7 +6,7 @@ import {
 import { networkPorts as bchnNetworkPorts } from 'bitcoin-cash-node-startos/startos/utils'
 import {
   rpcHostId as floweeRpcHostId,
-  rpcPort as floweeRpcPort,
+  networkPorts as floweeNetworkPorts,
 } from 'flowee-startos/startos/utils'
 import { electrumHostId, electrumPort } from 'fulcrum-bch-startos/startos/utils'
 import { sdk } from './sdk'
@@ -75,7 +75,12 @@ const RPC_BINDINGS: Record<
     ssl: false,
   },
   bchd: { hostId: bchdPlaintextHostId, port: () => bchdPlaintextPort },
-  flowee: { hostId: floweeRpcHostId, port: () => floweeRpcPort, ssl: false },
+  flowee: {
+    hostId: floweeRpcHostId,
+    port: (network) =>
+      floweeNetworkPorts[network === 'testnet' ? 'testnet' : network].rpc,
+    ssl: false,
+  },
 }
 
 /**
