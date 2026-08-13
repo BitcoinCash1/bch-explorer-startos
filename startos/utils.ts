@@ -6,7 +6,7 @@ import {
 import { networkPorts as bchnNetworkPorts } from 'bitcoin-cash-node-startos/startos/utils'
 import {
   rpcHostId as floweeRpcHostId,
-  networkPorts as floweeNetworkPorts,
+  rpcPort as floweeRpcPort,
 } from 'flowee-startos/startos/utils'
 import { electrumHostId, electrumPort } from 'fulcrum-bch-startos/startos/utils'
 import { sdk } from './sdk'
@@ -77,8 +77,10 @@ const RPC_BINDINGS: Record<
   bchd: { hostId: bchdPlaintextHostId, port: () => bchdPlaintextPort },
   flowee: {
     hostId: floweeRpcHostId,
-    port: (network) =>
-      floweeNetworkPorts[network === 'testnet' ? 'testnet' : network].rpc,
+    // helix-nine Flowee pins RPC to mainnet 8332 on every chain (no
+    // networkPorts export). Follow that published contract so this package
+    // typechecks against flowee-the-hub-startos#next.
+    port: () => floweeRpcPort,
     ssl: false,
   },
 }
