@@ -55,11 +55,23 @@ jobs:
           VERSION_FILE="startos/versions/v${VERSION_FILE_BASE}.ts"
           # Extract the literal version string e.g. '3.10.1:0' from that file
           VERSION=$(grep -E "version:[[:space:]]*'" "$VERSION_FILE" | head -1 | sed -E "s/.*version:[[:space:]]*'([^']+)'.*/\1/")
-          UPSTREAM_TAG="${VERSION%%:*}"
+          # Image tags follow Melroy explorer (3.12.0), not invented package
+          # upstream numbers like 3.12.4:1 (sdk-only). Read the manifest pin.
+          UPSTREAM_TAG=$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          t = Path("startos/manifest/index.ts").read_text()
+          m = re.search(r"bch-explorer-frontend:([0-9.]+)", t)
+          print(m.group(1) if m else "")
+          PY
+          )
+          if [ -z "$UPSTREAM_TAG" ]; then
+            UPSTREAM_TAG="${VERSION%%:*}"
+          fi
           echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "UPSTREAM_TAG=${UPSTREAM_TAG}" >> "$GITHUB_OUTPUT"
           echo "Detected version: ${VERSION}"
-          echo "Detected upstream tag: ${UPSTREAM_TAG}"
+          echo "Detected image tag: ${UPSTREAM_TAG}"
         shell: bash
 
       - name: Log in to GHCR
