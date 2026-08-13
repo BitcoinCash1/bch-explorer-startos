@@ -309,18 +309,29 @@ p('/backend/package/api/statistics/statistics.js',
         // the replacement (interprets it as a literal NUL byte), so use
         // busybox awk reading the needle/replacement from environment vars
         // (which preserves bytes verbatim — no escape interpretation).
-        // [frontend-shim] The Melroy frontend image has no mining-pools SVG assets.
-        // Inject a nginx location block that proxies /resources/mining-pools/ to
-        // the upstream bchexplorer.cash so pool logos render in the dashboard.
+        // [frontend-shim] Current Melroy frontend images ship ~95 pool SVGs
+        // under /resources/mining-pools/. An older shim proxied that path to
+        // bchexplorer.cash, which now returns 403 (browser proof-of-work), so
+        // every cube showed a broken "Logo of Unknown mining pool" image.
+        // Serve local files. Only re-add the proxy if the image has no SVGs.
         await webSub.exec([
           'sh', '-c',
-          `CONF=/etc/nginx/conf.d/nginx-explorer.conf; ` +
-          `MARKER='location /resources/mining-pools/'; ` +
-          `if ! grep -qF "$MARKER" "$CONF" 2>/dev/null; then ` +
-            `sed -i 's|location /resources {|location /resources/mining-pools/ {\\n\\t\\tproxy_pass https://bchexplorer.cash/resources/mining-pools/;\\n\\t\\tproxy_ssl_server_name on;\\n\\t\\texpires 7d;\\n\\t\\tadd_header Cache-Control "public";\\n\\t}\\n\\tlocation /resources {|' "$CONF" ` +
-            `&& echo "[frontend-shim] mining-pools proxy added" ` +
-            `|| echo "[frontend-shim] mining-pools proxy sed failed"; ` +
-          `else echo "[frontend-shim] mining-pools proxy already present"; fi`,
+          [
+            `CONF=/etc/nginx/conf.d/nginx-explorer.conf`,
+            `POOLS=/var/www/explorer/browser/resources/mining-pools`,
+            `MARKER='location /resources/mining-pools/'`,
+            `if grep -qF "$MARKER" "$CONF" 2>/dev/null; then`,
+            `  awk 'BEGIN{s=0} $0 ~ /location \\/resources\\/mining-pools\\// {s=1; next} s && /}/ {s=0; next} !s {print}' "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"`,
+            `  echo "[frontend-shim] mining-pools proxy removed"`,
+            `fi`,
+            `HAS_LOCAL=$(ls "$POOLS"/*.svg 2>/dev/null | head -1)`,
+            `if [ -n "$HAS_LOCAL" ]; then`,
+            `  echo "[frontend-shim] serving local mining-pool SVGs"`,
+            `else`,
+            `  sed -i 's|location /resources {|location /resources/mining-pools/ {\\n\\t\\tproxy_pass https://bchexplorer.cash/resources/mining-pools/;\\n\\t\\tproxy_ssl_server_name on;\\n\\t\\texpires 7d;\\n\\t\\tadd_header Cache-Control "public";\\n\\t}\\n\\tlocation /resources {|' "$CONF"`,
+            `  echo "[frontend-shim] mining-pools proxy added (no local SVGs)"`,
+            `fi`,
+          ].join('\n'),
         ])
         // Add nginx location blocks for non-mainnet networks.
         // The nginx template only has mainnet /api/ routes; on chipnet/testnet4/scalenet

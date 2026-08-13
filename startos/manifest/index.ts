@@ -41,7 +41,7 @@ export const manifest = setupManifest({
   alerts: {
     install:
       'BCH Explorer requires both Bitcoin Cash Node and Fulcrum BCH to be installed and synced. The database will be populated automatically on first start.\n\n' +
-      'For mining-pool logos and BCH/USD price history to populate, BCH Explorer needs outbound clearnet access. After install, in StartOS go to Services → BCH Explorer → Outbound Proxy and set it to your clearnet gateway (e.g. enp1s0 / eth0). Without this, the mining-pool dashboard logos and price chart will appear blank.',
+      'Pool logos are served from the package. For the BCH/USD price chart, set Services → BCH Explorer → Outbound Proxy to your clearnet gateway (e.g. enp1s0 / eth0).',
     update: null,
     uninstall:
       'Uninstalling BCH Explorer will permanently delete all cached explorer data and the database.',

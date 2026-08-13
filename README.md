@@ -73,14 +73,14 @@
 3. On first start, the backend SubContainer reads node RPC credentials from `/mnt/node/store.json`.
 4. Cache directory permissions are fixed (`chmod 777 /backend/cache`) to allow the non-root backend process to write.
 5. BCHD compatibility shims are applied at runtime via Node.js patches to the backend JavaScript (compensates for BCHD API differences from BCHN).
-6. A frontend shim injects a nginx proxy location for mining pool SVG assets from `bchexplorer.cash`.
+6. A frontend shim serves mining-pool SVGs from the frontend image (and strips any leftover nginx proxy to `bchexplorer.cash`, which now returns 403).
 7. A hex2ascii display patch is applied to Angular chunk files to strip control characters from coinbase/OP_RETURN text.
 8. MariaDB starts and becomes ready on port 3306.
 9. The backend API starts, connects to MariaDB and the BCH node, and begins populating the database. The API is ready when port 8999 opens.
 10. nginx frontend starts, proxying API requests to port 8999. The web UI is ready when port 8080 opens.
 11. Fulcrum BCH provides Electrum data (address lookups, transaction history) continuously.
 
-> **Note on outbound access:** Mining pool logos and BCH/USD price history require outbound clearnet access. After install, configure an outbound proxy in StartOS (Services → BCH Explorer → Outbound Proxy) to populate these features.
+> **Note on outbound access:** The BCH/USD price chart still needs outbound clearnet (Services → BCH Explorer → Outbound Proxy). Pool logos are served from the frontend image.
 
 ---
 
@@ -213,7 +213,7 @@ The MariaDB dump is performed using `healthcheck.sh --connect --innodb_initializ
 | Setting | Upstream Default | StartOS Value | Reason |
 |---|---|---|---|
 | `CORE_RPC_PORT` for BCHD | 8332 | 8334 | BCHD's RPC is TLS-only; backend has no TLS support; stunnel plaintext proxy on 8334 is used |
-| Mining pool logo assets | Served from local `/resources/mining-pools/` | Proxied from `bchexplorer.cash` via nginx inject | The Melroy frontend image ships no mining-pool SVG assets |
+| Mining pool logo assets | Proxied from `bchexplorer.cash` | Served from local `/resources/mining-pools/` | The Melroy image now ships the SVGs; the old proxy returns 403 |
 | `tx_count` column type | `smallint unsigned` (max 65535) | `int unsigned` via runtime ALTER | BCH blocks can exceed 65535 transactions (e.g., block 840002 with 72,174 txs); causes INSERT errors otherwise |
 | BCHD `getblock` verbosity response | Returns `rawtx` field | Shimmed: `tx = tx || rawtx || []` | BCHD uses `rawtx` instead of `tx` in verbosity=2 responses |
 | BCHD `getblockstats` | Not implemented (-32601) | Shimmed: falls back to local stats | Explorer calls `getblockstats` for block statistics; BCHD does not implement it |
@@ -229,7 +229,7 @@ The MariaDB dump is performed using `healthcheck.sh --connect --innodb_initializ
 1. **BCHD is mainnet only** for this explorer. BCHD does not support testnet4, chipnet, or scalenet.
 2. **Flowee is mainnet only** for this explorer (Flowee currently supports mainnet only).
 3. **Fulcrum BCH is always required** — it is the only supported Electrum indexer. The "Select Indexer" action exists for future extensibility but currently only offers Fulcrum.
-4. Mining pool logos and BCH/USD price history are **blank by default**. An outbound proxy (clearnet gateway) must be configured in StartOS for these to populate.
+4. Pool logos come from the frontend image. Unnamed chipnet miners still show the Unknown icon (no matching coinbase tag). The BCH/USD price chart still needs an outbound clearnet proxy.
 5. Several BCHD API compatibility shims are applied at runtime by patching compiled JavaScript in the backend image. These shims compensate for BCHD API differences from the BCHN-compatible upstream. See `main.ts` for full detail.
 6. The database `tx_count` column is widened from `smallint` to `int` at runtime via ALTER TABLE to support large BCH blocks. This ALTER is idempotent and safe to repeat.
 7. All three containers (frontend, backend, MariaDB) are `x86_64` only. The `emulateMissingAs: x86_64` setting allows the package to install on aarch64/riscv64 hardware via emulation, with a performance penalty.

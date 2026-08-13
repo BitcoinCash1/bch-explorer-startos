@@ -15,8 +15,8 @@ StartOS.
 - **Address history and balance** — powered by the Fulcrum Electrum index.
 - **Mempool dashboard** — live unconfirmed transaction pool, fee histogram, and
   3-day mempool graph.
-- **Mining pool dashboard** — recent block finders with pool logos (requires outbound
-  clearnet access — see below).
+- **Mining pool dashboard** — recent block finders with pool logos (served from
+  this package).
 - **BCH/USD price chart** (requires outbound clearnet access — see below).
 
 ## Prerequisites
@@ -40,15 +40,13 @@ explorer will display a loading state or blank pages until indexing is complete.
 3. Install BCH Explorer. It connects to both dependencies automatically.
 4. Open the BCH Explorer **Web UI** from the service's Dashboard to start browsing.
 
-## Outbound access for price and pool data
+## Outbound access for the price chart
 
-BCH Explorer fetches mining pool logos and the BCH/USD price history from the
-internet. Without outbound clearnet access, the mining-pool dashboard logos and
-price chart remain blank.
+Pool logos are served from the explorer image. The BCH/USD price chart still
+needs outbound clearnet access.
 
 To enable it: in StartOS go to **Services → BCH Explorer → Outbound Proxy** and
-set it to your clearnet gateway interface (for example `enp1s0` or `eth0`). Once
-set, the price chart and pool logos populate automatically.
+set it to your clearnet gateway interface (for example `enp1s0` or `eth0`).
 
 ## Configuration
 
@@ -82,8 +80,8 @@ MariaDB recreates a clean `tc.log` on the next start.
 
 - **Both dependencies must be fully synced** before the explorer is functional.
   Expect several hours of IBD (node) plus several hours of indexing (Fulcrum) on first use.
-- Mining pool logos and the price chart require outbound clearnet access configured
-  via the Outbound Proxy setting.
+- The price chart requires outbound clearnet access via Outbound Proxy. Unnamed
+  chipnet miners show the Unknown icon because they have no known coinbase tag.
 - StartOS backups include a full `mysqldump` of the MariaDB explorer database and
   all application data. A restore fully recovers indexed chain data without re-syncing.
 - Uninstalling BCH Explorer permanently deletes all cached explorer data and the
