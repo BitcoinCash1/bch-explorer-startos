@@ -2,12 +2,9 @@ import { VersionInfo } from '@start9labs/start-sdk'
 
 export const v_3_12_3_0 = VersionInfo.of({
   version: '3.12.3:0',
-  releaseNotes: {
-    en_US:
-      'Fix address pages against Flowee: validateaddress rejects cashaddr (bchtest:/bitcoincash:), so the UI 500ed with "Failed to get address transactions". The cashaddr shim now decodes those addresses itself when the node returns isvalid=false.',
-  },
+  releaseNotes: 'Upstream 3.12.3. All Start9 patches (BCHD compatibility, B/s chart fix, Goggles start height, getMempoolEntry shim) carried forward.',
   migrations: {
-    up: async () => {},
-    down: async () => {},
+    up: async ({ effects }) => {},
+    down: async ({ effects }) => {},
   },
 })
