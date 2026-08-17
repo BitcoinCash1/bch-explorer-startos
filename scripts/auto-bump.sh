@@ -53,11 +53,24 @@ if ! grep -qE "(\[|[[:space:]])${CURRENT_VAR}," startos/versions/index.ts; then
   sed -i "s/other: \[/other: [${CURRENT_VAR}, /" startos/versions/index.ts
 fi
 
-# Fail loudly here rather than 30 minutes later in the package build.
-if ! npx tsc --noEmit -p . >/dev/null 2>&1; then
-  echo "auto-bump produced a version graph that does not type-check:" >&2
-  npx tsc --noEmit -p . 2>&1 | head -10 >&2
-  exit 1
+# Sanity-check the graph we just edited. auto-bump runs before `npm ci` in the
+# workflow, so tsc usually is not installed yet — do not invoke npx here, it
+# would fetch an arbitrary package or fail. Only type-check when a compiler is
+# already present locally; otherwise fall back to a cheap textual duplicate
+# check, which is the failure mode this script can actually cause.
+if [ -x node_modules/.bin/tsc ]; then
+  if ! node_modules/.bin/tsc --noEmit -p . >/dev/null 2>&1; then
+    echo "auto-bump produced a version graph that does not type-check:" >&2
+    node_modules/.bin/tsc --noEmit -p . 2>&1 | head -10 >&2
+    exit 1
+  fi
+else
+  dupes=$(grep -oE "^import \{ v_[0-9_]+ \}" startos/versions/index.ts | sort | uniq -d)
+  if [ -n "$dupes" ]; then
+    echo "auto-bump produced duplicate imports in startos/versions/index.ts:" >&2
+    echo "$dupes" >&2
+    exit 1
+  fi
 fi
 
 git config user.name "github-actions[bot]"
