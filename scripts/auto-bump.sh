@@ -38,9 +38,27 @@ EOF
 
 sed -i "s|explorer-frontend:[0-9][0-9.]*'|explorer-frontend:${DISPATCHED_TAG}'|g" startos/manifest/index.ts
 sed -i "s|explorer-backend:[0-9][0-9.]*'|explorer-backend:${DISPATCHED_TAG}'|g" startos/manifest/index.ts
-sed -i "1a import { ${TAG_VAR} } from './v${DISPATCHED_TAG}.0'" startos/versions/index.ts
+# Both edits below must be idempotent. Upstream tags do not always arrive in
+# order, and a re-dispatch of the same tag re-runs this script — inserting the
+# import or the `other` entry a second time produces
+# "TS2300: Duplicate identifier", which fails the build.
+if ! grep -q "import { ${TAG_VAR} } from" startos/versions/index.ts; then
+  sed -i "1a import { ${TAG_VAR} } from './v${DISPATCHED_TAG}.0'" startos/versions/index.ts
+fi
+
 sed -i "s/current: ${CURRENT_VAR}/current: ${TAG_VAR}/" startos/versions/index.ts
-sed -i "s/other: \[/other: [${CURRENT_VAR}, /" startos/versions/index.ts
+
+# Demote the previous current into `other`, unless it is already listed there.
+if ! grep -qE "(\[|[[:space:]])${CURRENT_VAR}," startos/versions/index.ts; then
+  sed -i "s/other: \[/other: [${CURRENT_VAR}, /" startos/versions/index.ts
+fi
+
+# Fail loudly here rather than 30 minutes later in the package build.
+if ! npx tsc --noEmit -p . >/dev/null 2>&1; then
+  echo "auto-bump produced a version graph that does not type-check:" >&2
+  npx tsc --noEmit -p . 2>&1 | head -10 >&2
+  exit 1
+fi
 
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
