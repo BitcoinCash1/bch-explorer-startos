@@ -107,9 +107,13 @@ if [ -z "${GITHUB_ACTIONS:-}" ]; then
   exit 0
 fi
 
-git config user.name "github-actions[bot]"
-git config user.email "github-actions[bot]@users.noreply.github.com"
+# Pass the bot identity per-invocation. `git config user.name ...` without
+# --global writes .git/config, which permanently rewrites the identity of
+# whichever clone it runs in — every later commit in that clone is then
+# misattributed to github-actions[bot].
 git add startos/versions/index.ts "$NEW_FILE" startos/manifest/index.ts
-git commit -m "feat: auto-bump to upstream ${DISPATCHED_TAG} (v${NEW_VERSION})"
+git -c user.name="github-actions[bot]" \
+    -c user.email="github-actions[bot]@users.noreply.github.com" \
+    commit -m "feat: auto-bump to upstream ${DISPATCHED_TAG} (v${NEW_VERSION})"
 git push origin master
 echo "Version bump committed — continuing build"
