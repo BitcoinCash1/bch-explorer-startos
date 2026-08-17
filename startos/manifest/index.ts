@@ -19,7 +19,7 @@ export const manifest = setupManifest({
     frontend: {
       source: {
         dockerTag:
-          'ghcr.io/bitcoincash1/bch-explorer-frontend:3.12.3',
+          'ghcr.io/bitcoincash1/bch-explorer-frontend:3.13.0',
       },
       arch: ['x86_64'],
       emulateMissingAs: 'x86_64',
@@ -27,7 +27,7 @@ export const manifest = setupManifest({
     backend: {
       source: {
         dockerTag:
-          'ghcr.io/bitcoincash1/bch-explorer-backend:3.12.3',
+          'ghcr.io/bitcoincash1/bch-explorer-backend:3.13.0',
       },
       arch: ['x86_64'],
       emulateMissingAs: 'x86_64',
@@ -45,7 +45,7 @@ export const manifest = setupManifest({
       optional: true,
       metadata: {
         title: 'Bitcoin Cash Node',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/bitcoin-cash-node-startos/master/icon.png',
+        icon: 'dependency-icons/bitcoincashd.png',
       },
     },
     bchd: {
@@ -54,7 +54,7 @@ export const manifest = setupManifest({
       optional: true,
       metadata: {
         title: 'Bitcoin Cash Daemon',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/bitcoin-cash-daemon-startos/master/icon.png',
+        icon: 'dependency-icons/bchd.png',
       },
     },
     flowee: {
@@ -63,7 +63,7 @@ export const manifest = setupManifest({
       optional: true,
       metadata: {
         title: 'Flowee the Hub',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/flowee-the-hub-startos/master/icon.png',
+        icon: 'dependency-icons/flowee.png',
       },
     },
     'knuth-bch': {
@@ -72,7 +72,7 @@ export const manifest = setupManifest({
       optional: true,
       metadata: {
         title: 'Knuth',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/knuth-bch-startos/master/icon.svg',
+        icon: 'dependency-icons/knuth-bch.svg',
       },
     },
     'fulcrum-bch': {
@@ -81,7 +81,7 @@ export const manifest = setupManifest({
       optional: false,
       metadata: {
         title: 'Fulcrum BCH',
-        icon: 'https://raw.githubusercontent.com/BitcoinCash1/fulcrum-bch-startos/master/icon.png',
+        icon: 'dependency-icons/fulcrum-bch.png',
       },
     },
   },
