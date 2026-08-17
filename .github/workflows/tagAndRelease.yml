@@ -3,7 +3,10 @@ name: Tag and Release
 on:
   push:
     branches: ['master']
-    paths-ignore: ['*.md']
+    # scripts/** and .github/** are excluded so tooling and workflow edits do not
+    # republish an otherwise unchanged package. Melroy's automated path is
+    # repository_dispatch, which paths-ignore does not affect.
+    paths-ignore: ['*.md', 'scripts/**', '.github/**']
   workflow_dispatch:
   repository_dispatch:
     types: [upstream-release]

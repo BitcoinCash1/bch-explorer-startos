@@ -17,11 +17,35 @@ if [ "$CURRENT_UPSTREAM" = "$DISPATCHED_TAG" ]; then
   echo "Already at $DISPATCHED_TAG — no bump needed"
   exit 0
 fi
+
+# Never move `current` downwards. Upstream re-tags old branches and a
+# repository_dispatch can arrive out of order; taking the payload on faith is
+# how this package shipped 3.12.1:0 as an "update" to installs already running
+# 3.12.4:1. StartOS compares the part before the colon as a semver, so a lower
+# tag is a downgrade no marketplace will offer and no server can migrate to.
+HIGHEST=$(printf '%s\n%s\n' "$CURRENT_UPSTREAM" "$DISPATCHED_TAG" | sort -V | tail -1)
+if [ "$HIGHEST" = "$CURRENT_UPSTREAM" ]; then
+  echo "::warning::Dispatched tag $DISPATCHED_TAG is older than the packaged version $CURRENT_UPSTREAM — refusing to downgrade; leaving the version graph alone"
+  exit 0
+fi
+
 echo "Bumping $CURRENT_UPSTREAM -> $DISPATCHED_TAG"
 
 TAG_VAR="v_$(echo "$DISPATCHED_TAG" | tr '.' '_')_0"
 NEW_VERSION="${DISPATCHED_TAG}:0"
 NEW_FILE="startos/versions/v${DISPATCHED_TAG}.0.ts"
+
+# Never clobber a version file that already exists. `cat >` used to overwrite
+# it, which is how the hand-written release notes for 3.12.2:0 and 3.12.3:0
+# were replaced by the generic "Upstream <tag>" text. A collision here means
+# the number was already spent on a packaging-only release, so the graph needs
+# a human decision (a higher revision, or a new upstream number) rather than a
+# silent overwrite.
+if [ -e "$NEW_FILE" ]; then
+  echo "$NEW_FILE already exists — $NEW_VERSION was already used by this package." >&2
+  echo "Resolve the version graph by hand before bumping to $DISPATCHED_TAG." >&2
+  exit 1
+fi
 
 cat > "$NEW_FILE" <<EOF
 import { VersionInfo } from '@start9labs/start-sdk'
@@ -71,6 +95,16 @@ else
     echo "$dupes" >&2
     exit 1
   fi
+fi
+
+# Never publish from a developer machine. This script ends in `git push`, so
+# running it locally just to see what it would do used to push a real release
+# commit to master — pinning image tags upstream had not built yet, which fails
+# the build. In CI, GITHUB_ACTIONS is always "true".
+if [ -z "${GITHUB_ACTIONS:-}" ]; then
+  echo "Not running in GitHub Actions — bump left uncommitted." >&2
+  echo "Inspect with 'git diff', then commit manually if that is what you want." >&2
+  exit 0
 fi
 
 git config user.name "github-actions[bot]"
