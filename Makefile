@@ -10,8 +10,14 @@ ARCHES ?= x86 arm riscv
 # runs.
 SDK_MK := node_modules/@start9labs/start-sdk/s9pk.mk
 
+# npm ci writes its summary to stdout, and this recipe runs during the *parse*
+# of any goal — including `make -s print-TARGETS`, which the shared build
+# workflow captures to build its matrix. On a fresh checkout that captured
+# "x86 arm riscv" with npm's install summary glued to the front, fanning the
+# PR build out over a dozen junk targets. Send npm's chatter to stderr so the
+# only thing on stdout is what the goal actually prints.
 $(SDK_MK): package.json package-lock.json
-	npm ci
+	npm ci >&2
 	@touch $@
 
 -include $(SDK_MK)
