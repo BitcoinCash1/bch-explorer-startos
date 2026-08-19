@@ -7,6 +7,9 @@ if [ -z "$DISPATCHED_TAG" ]; then
   exit 1
 fi
 
+# Melroy sometimes sends v3.13.0. Version files and image tags are unprefixed.
+DISPATCHED_TAG="${DISPATCHED_TAG#v}"
+
 CURRENT_VAR=$(grep -E '^[[:space:]]*current:' startos/versions/index.ts | head -1 \
   | sed -E 's/.*current:[[:space:]]*([A-Za-z0-9_]+).*/\1/')
 VERSION_FILE_BASE=$(echo "$CURRENT_VAR" | sed -E 's/^v_//; s/_/./g')
@@ -29,32 +32,10 @@ if [ "$HIGHEST" = "$CURRENT_UPSTREAM" ]; then
   exit 0
 fi
 
-# Do not pin a tag whose images are not on GHCR yet. Melroy's dispatch can
-# arrive before BitcoinCash1 has rebuilt frontend/backend — that is how
-# 3.13.0:0 landed on master and then failed at `docker pull`. Skipping keeps
-# Tag and Release green; a later dispatch of the same tag will bump.
-FRONTEND_IMG="ghcr.io/bitcoincash1/bch-explorer-frontend:${DISPATCHED_TAG}"
-BACKEND_IMG="ghcr.io/bitcoincash1/bch-explorer-backend:${DISPATCHED_TAG}"
-if command -v docker >/dev/null 2>&1; then
-  missing=0
-  for img in "$FRONTEND_IMG" "$BACKEND_IMG"; do
-    if ! docker manifest inspect "$img" >/dev/null 2>&1; then
-      echo "::warning::GHCR image not found: $img"
-      missing=1
-    fi
-  done
-  if [ "$missing" -ne 0 ]; then
-    echo "Upstream $DISPATCHED_TAG images are not on GHCR yet — leaving the version graph alone"
-    exit 0
-  fi
-fi
-
 # Never clobber a version file that already exists. `cat >` used to overwrite
-# it, which is how the hand-written release notes for 3.12.2:0 and 3.12.3:0
-# were replaced by the generic "Upstream <tag>" text. If :0 (or :1, …) was
-# already spent on a packaging-only pin, take the next free revision so a
-# later real upstream dispatch of the same tag still publishes (e.g. 3.12.4:2
-# after 3.12.4:0/:1) instead of failing Tag and Release.
+# hand-written release notes. If :0 was already spent, take the next free
+# revision. Images are resolved later by Tag and Release (GHCR, then Melroy).
+# Do not skip the bump just because GHCR has not been mirrored yet.
 REV=0
 while [ -e "startos/versions/v${DISPATCHED_TAG}.${REV}.ts" ]; do
   REV=$((REV + 1))
@@ -138,5 +119,10 @@ git add startos/versions/index.ts "$NEW_FILE" startos/manifest/index.ts
 git -c user.name="github-actions[bot]" \
     -c user.email="github-actions[bot]@users.noreply.github.com" \
     commit -m "feat: auto-bump to upstream ${DISPATCHED_TAG} (v${NEW_VERSION})"
-git push origin master
+# GITHUB_TOKEN pushes do not re-trigger this workflow, so the same job
+# continues and builds the bump. Retry once if master moved.
+if ! git push origin master; then
+  git pull --rebase origin master
+  git push origin master
+fi
 echo "Version bump committed — continuing build"

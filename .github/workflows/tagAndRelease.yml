@@ -15,7 +15,7 @@ permissions:
   contents: write
   id-token: write
   attestations: write
-  packages: read
+  packages: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -32,6 +32,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           submodules: recursive
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Find or create developer signing key
         run: |
@@ -65,7 +67,7 @@ jobs:
           import re
           from pathlib import Path
           t = Path("startos/manifest/index.ts").read_text()
-          m = re.search(r"bch-explorer-frontend:([0-9.]+)", t)
+          m = re.search(r"explorer-frontend:v?([0-9.]+)", t)
           print(m.group(1) if m else "")
           PY
           )
@@ -91,8 +93,27 @@ jobs:
 
       - name: Pull explorer images
         run: |
-          docker pull ghcr.io/bitcoincash1/bch-explorer-frontend:${{ steps.upstream.outputs.UPSTREAM_TAG }}
-          docker pull ghcr.io/bitcoincash1/bch-explorer-backend:${{ steps.upstream.outputs.UPSTREAM_TAG }}
+          set -euo pipefail
+          TAG="${{ steps.upstream.outputs.UPSTREAM_TAG }}"
+          pull_one() {
+            local kind="$1"
+            local ghcr="ghcr.io/bitcoincash1/bch-explorer-${kind}:${TAG}"
+            local melroy="registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-${kind}:${TAG}"
+            if docker pull "$ghcr"; then
+              echo "Using $ghcr"
+              return 0
+            fi
+            echo "GHCR has no ${kind}:${TAG} — pulling Melroy and tagging as $ghcr"
+            docker pull "$melroy"
+            docker tag "$melroy" "$ghcr"
+            if docker push "$ghcr"; then
+              echo "Mirrored $melroy -> $ghcr"
+            else
+              echo "::warning::Could not push $ghcr (local tag is enough for this build)"
+            fi
+          }
+          pull_one frontend
+          pull_one backend
 
       - name: Build service packages
         run: |
