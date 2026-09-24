@@ -63,5 +63,7 @@ near-replica of that copy: every difference must be one of those listed below.
 - **Commit and PR hygiene:** no session links, `Co-Authored-By` trailers or
   "Generated with" footers in commit messages, PR descriptions or comments.
   The Session Link Guard workflow fails any PR or push that carries one.
-  Commits are authored by the maintainer.
+  Commits are authored by the maintainer, and all repository text (code
+  comments, docs, commit messages, PR text) is written in the maintainer's
+  voice, without naming the tools used to produce it.
 - **Deliberate differences from Start9-Community:** newer upstream images (mirrored to GHCR by `check-upstream.yml` before `scripts/auto-bump.sh` opens the bump PR); Knuth (`knuth-bch`) as a fourth node backend; the `hex2ascii` shim also matching the backtick-quoted 3.14+ frontend build; `ALLOW_DOWNGRADE` in `current.ts`; `dependabot.yml`; `session-link-guard.yml`; `archive/` (including the dependency logos); the matching README/instructions notes. After an upstream bump, run every patch in `shims.ts` against the new images: a pattern that stops matching fails silently.
