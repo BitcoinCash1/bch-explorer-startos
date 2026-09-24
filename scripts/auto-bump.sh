@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Bump the package to a new upstream BCH Explorer release and open a pull request.
+# Bump the package to a new upstream BCH Explorer release, commit it to master
+# and release it.
 #
 #   scripts/auto-bump.sh <upstream-tag>      e.g. scripts/auto-bump.sh 3.14.3
 #
 # Sets startos/versions/current.ts to `<upstream>:0` (a new upstream always
 # starts at package revision 0), resets ALLOW_DOWNGRADE to false, updates the
-# image tags in the manifest, then commits on `auto-bump/v<tag>` and opens a PR
-# against master. Merging the PR is what releases it.
+# image tags in the manifest, then commits the bump to master.
 #
-# The images must already be on GHCR (the Check Upstream workflow mirrors them
-# from Melroy's registry before calling this).
+# Run by Tag and Release on Melroy's repository_dispatch; the same job then
+# mirrors the images to GHCR, builds and releases.
 #
-# DRY_RUN=1 edits and commits locally but skips the push and the PR.
+# DRY_RUN=1 edits and commits locally but skips the push.
 set -euo pipefail
 
 TAG="${1:-}"
@@ -49,7 +49,7 @@ path, new_version, upstream = sys.argv[1:]
 src = open(path).read()
 src, n = re.subn(r"(\n\s*version:\s*)'[^']+'", rf"\g<1>'{new_version}'", src, count=1)
 assert n == 1, 'version line not found'
-# Release notes are rewritten for review in the PR; translations are added there.
+# The release notes are a placeholder; translations are added by hand afterwards.
 src, n = re.subn(
     r"releaseNotes:\s*(\{.*?\n  \}|'[^']*'|`[^`]*`),",
     "releaseNotes: {\n    en_US: 'Updates BCH Explorer to upstream " + upstream + ".',\n  },",
@@ -61,8 +61,6 @@ PY
 
 sed -i -E "s#(bch-explorer-(frontend|backend)):[0-9][^']*#\1:${UPSTREAM}#g" "$MANIFEST"
 
-BRANCH="auto-bump/v${UPSTREAM}"
-git checkout -b "$BRANCH"
 git add "$CURRENT_FILE" "$MANIFEST"
 # Pass the bot identity per-invocation so a local run does not rewrite the
 # clone's own git identity.
@@ -71,11 +69,8 @@ git -c user.name="github-actions[bot]" \
     commit -m "feat: bump BCH Explorer to upstream ${UPSTREAM} (${NEW_VERSION})"
 
 if [ "${DRY_RUN:-0}" = "1" ]; then
-  echo "DRY_RUN: committed on $BRANCH, not pushed"
+  echo "DRY_RUN: committed on master, not pushed"
   exit 0
 fi
 
-git push origin "$BRANCH"
-gh pr create --base master --head "$BRANCH" \
-  --title "Bump BCH Explorer to upstream ${UPSTREAM} (${NEW_VERSION})" \
-  --body "Automated bump to upstream BCH Explorer ${UPSTREAM}. Review the release notes (add translations) before merging; merging releases ${NEW_VERSION}."
+git push origin master

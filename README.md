@@ -207,7 +207,7 @@ What is kept is `store.json`, on the `main` volume: the node selection, and **th
 
 ## Upstream Updates
 
-When upstream publishes a release, its pipeline sends this repository a `repository_dispatch`, which runs `check-upstream.yml` (it can also be run by hand with a tag). The workflow copies that release's frontend and backend images from Melroy's registry to GHCR, where the manifest pins them, then `scripts/auto-bump.sh` sets `startos/versions/current.ts` to `<upstream>:0`, resets `ALLOW_DOWNGRADE` to `false`, updates the image tags in the manifest, and opens a pull request from `auto-bump/v<tag>`. A tag older than the packaged version is refused. Nothing reaches `master` until that PR is reviewed and merged; merging it is what releases the new version. Package-only fixes bump the revision after the colon by hand in their own PR.
+When upstream publishes a release, its pipeline sends this repository a `repository_dispatch`, which runs `tagAndRelease.yml` directly. In that one job, `scripts/auto-bump.sh` sets `startos/versions/current.ts` to `<upstream>:0`, resets `ALLOW_DOWNGRADE` to `false`, updates the image tags in the manifest and commits the bump to `master`; the job then copies that release's frontend and backend images from Melroy's registry to GHCR (where the manifest pins them), builds the s9pk and publishes the GitHub release. A tag older than the packaged version is refused. Package-only fixes bump the revision after the colon by hand.
 
 ## Quick Reference for AI Consumers
 
