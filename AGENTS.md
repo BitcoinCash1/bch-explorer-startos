@@ -35,3 +35,33 @@ verified, tried, and decided belongs in the commit message and the PR body.
 - **`main` throws only for a chain the explorer cannot render** (regtest). An unreachable node or indexer is a warning and an unset env var, not a failure — the `.const()` heals it.
 - **The backend's `start.sh` refuses to run while its PID file exists**, so the daemon command removes a stale one and kills whatever still holds the API port before exec'ing. Without it, one crash wedges every subsequent restart.
 - **`repair-mariadb` exists because a StartOS rebuild does not remove `tc.log`.** MariaDB crash-loops on a bad magic header in that file after an unclean shutdown or a full disk; the action deletes only that file and keeps the indexed data.
+
+## Repository conventions
+
+This repo is the original the Start9-Community copy is imported from. Keep it a
+near-replica of that copy: every difference must be one of those listed below.
+
+- **Syncing with Start9-Community:** `git merge` their `master` into ours, never
+  rebase or force-push. Take their side for packaging, layout, docs and CI;
+  keep only the deliberate differences below.
+- **Branches:** `master` is released — every push to it runs Tag and Release.
+  Work happens on short-lived branches and reaches `master` through a PR.
+  `next` is kept on purpose: Start9's Sync Next workflow mirrors `master` into
+  it, so do not delete it.
+- **Versions:** `<upstream>:<revision>` in the single `startos/versions/current.ts`.
+  Never change the upstream part by hand; a new upstream starts at `:0` (the
+  auto-bump PR does this). Bump the revision once per shipped package change —
+  not for docs, CI or archive changes. `ALLOW_DOWNGRADE` stays `false` unless a
+  release is known to be reversible.
+- **`assets/` vs `archive/`:** `assets/` is packed into the s9pk as a whole, so
+  it holds only `.gitkeep` unless the service reads a file at runtime.
+  `archive/` holds reference material (`ABOUT.md`, logos, picture variants) and
+  is not packed. Never delete anything in `archive/`.
+- **What StartOS shows:** name from `title` in `startos/manifest/index.ts`,
+  description and About text from `short`/`long` in `startos/manifest/i18n.ts`,
+  Instructions tab from `instructions.md` (required), logo from `icon.png`.
+- **Commit and PR hygiene:** no session links, `Co-Authored-By` trailers or
+  "Generated with" footers in commit messages, PR descriptions or comments.
+  The Session Link Guard workflow fails any PR or push that carries one.
+  Commits are authored by the maintainer.
+- **Deliberate differences from Start9-Community:** newer upstream images (mirrored to GHCR by `check-upstream.yml` before `scripts/auto-bump.sh` opens the bump PR); Knuth (`knuth-bch`) as a fourth node backend; the `hex2ascii` shim also matching the backtick-quoted 3.14+ frontend build; `ALLOW_DOWNGRADE` in `current.ts`; `dependabot.yml`; `session-link-guard.yml`; `archive/` (including the dependency logos); the matching README/instructions notes. After an upstream bump, run every patch in `shims.ts` against the new images: a pattern that stops matching fails silently.
