@@ -66,4 +66,13 @@ near-replica of that copy: every difference must be one of those listed below.
   Commits are authored by the maintainer, and all repository text (code
   comments, docs, commit messages, PR text) is written in the maintainer's
   voice, without naming the tools used to produce it.
+- **Toolchain:** always follow the latest Start9 tooling — the newest
+  `@start9labs/start-sdk` on npm (pinned exactly, with the `overrides` entry),
+  the newest `start-cli` release, and the latest `Start9Labs/hello-world-startos`
+  template. Its boilerplate files (workflows, `Makefile`, `tsconfig.json`,
+  `.gitignore`, `.dockerignore`, `CLAUDE.md`, `startos/index.ts`,
+  `startos/sdk.ts`, `startos/i18n/index.ts`, `startos/versions/index.ts`) stay
+  byte-identical to it unless a difference is listed below. When the template,
+  SDK or CLI moves, update every package. Where the template and the
+  Start9-Community copy disagree, the template wins.
 - **Deliberate differences from Start9-Community:** newer upstream images (mirrored to GHCR by `check-upstream.yml` before `scripts/auto-bump.sh` opens the bump PR); Knuth (`knuth-bch`) as a fourth node backend; the `hex2ascii` shim also matching the backtick-quoted 3.14+ frontend build; `ALLOW_DOWNGRADE` in `current.ts`; `dependabot.yml`; `session-link-guard.yml`; `archive/` (including the dependency logos); the matching README/instructions notes. After an upstream bump, run every patch in `shims.ts` against the new images: a pattern that stops matching fails silently.
