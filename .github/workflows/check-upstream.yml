@@ -1,0 +1,81 @@
+name: Check Upstream
+
+# Melroy's release pipeline sends a `repository_dispatch` with the new tag. A
+# manual run takes the tag as input. Either way the images are mirrored to GHCR
+# first (the manifest pins them there), then a bump PR is opened.
+on:
+  repository_dispatch:
+    types: [upstream-release]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Upstream BCH Explorer tag, e.g. 3.14.3'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve tag
+        id: tag
+        env:
+          TAG: ${{ github.event.client_payload.tag || inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${TAG#v}"
+          if [ -z "$TAG" ]; then echo "No tag given"; exit 1; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Skip if a bump PR already exists
+        id: existing
+        run: |
+          if git ls-remote --exit-code --heads origin "auto-bump/v${{ steps.tag.outputs.tag }}" >/dev/null; then
+            echo "A bump PR for ${{ steps.tag.outputs.tag }} is already open — nothing to do"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
+      - name: Log in to GHCR
+        if: steps.existing.outputs.skip != 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror explorer images to GHCR
+        if: steps.existing.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          for kind in frontend backend; do
+            ghcr="ghcr.io/bitcoincash1/bch-explorer-${kind}:${TAG}"
+            melroy="registry.melroy.org/bitcoincash/bitcoin-cash-explorer/explorer-${kind}:${TAG}"
+            if docker manifest inspect "$ghcr" >/dev/null 2>&1; then
+              echo "$ghcr already exists"
+              continue
+            fi
+            docker pull "$melroy"
+            docker tag "$melroy" "$ghcr"
+            docker push "$ghcr"
+            echo "Mirrored $melroy -> $ghcr"
+          done
+        shell: bash
+
+      - name: Open bump PR
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/auto-bump.sh "${{ steps.tag.outputs.tag }}"
+        shell: bash

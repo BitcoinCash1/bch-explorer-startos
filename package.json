@@ -1,5 +1,5 @@
 {
-  "name": "bch-explorer",
+  "name": "bch-explorer-startos",
   "scripts": {
     "build": "rm -rf ./javascript && ncc build startos/index.ts -o ./javascript",
     "prettier": "prettier --write startos",
@@ -7,10 +7,14 @@
   },
   "dependencies": {
     "@start9labs/start-sdk": "2.0.9",
-    "bitcoin-cash-node-startos": "git+https://github.com/BitcoinCash1/bitcoin-cash-node-startos.git#master",
-    "bitcoin-cash-daemon-startos": "git+https://github.com/BitcoinCash1/bitcoin-cash-daemon-startos.git#master",
-    "flowee-startos": "git+https://github.com/BitcoinCash1/flowee-the-hub-startos.git#master",
-    "knuth-bch-startos": "git+https://github.com/BitcoinCash1/knuth-bch-startos.git#master"
+    "bitcoin-cash-daemon-startos": "github:Start9-Community/bitcoin-cash-daemon-startos#next",
+    "bitcoin-cash-node-startos": "github:Start9-Community/bitcoin-cash-node-startos#next",
+    "flowee-startos": "github:Start9-Community/flowee-the-hub-startos#next",
+    "fulcrum-bch-startos": "github:Start9-Community/fulcrum-bch-startos#next",
+    "knuth-bch-startos": "github:Start9-Community/knuth-bch-startos#master"
+  },
+  "overrides": {
+    "@start9labs/start-sdk": "$@start9labs/start-sdk"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
@@ -23,8 +27,5 @@
     "tabWidth": 2,
     "semi": false,
     "singleQuote": true
-  },
-  "overrides": {
-    "@start9labs/start-sdk": "$@start9labs/start-sdk"
   }
 }
