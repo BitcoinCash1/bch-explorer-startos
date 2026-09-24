@@ -1,325 +1,255 @@
-<div align="center">
-  <img src="icon.png" alt="BCH Explorer logo" width="21%" />
-  <h1>BCH Explorer</h1>
-</div>
+<p align="center">
+  <img src="icon.png" alt="BCH Explorer Logo" width="21%">
+</p>
 
-> **Upstream docs:** [gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer](https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer)
->
-> BCH Explorer is a Bitcoin Cash block explorer based on Mempool/mempool, adapted for BCH by Melroy van den Berg. It provides a searchable web interface for blocks, transactions, addresses, mining statistics, and a mempool dashboard.
+# BCH Explorer on StartOS
+
+> Everything not listed in this document should behave the same as upstream
+> BCH Explorer. If a feature, setting, or behavior is not mentioned here, the
+> upstream documentation is accurate and fully applicable — see the
+> Documentation section of `instructions.md` for links.
+
+[BCH Explorer](https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer) is a block explorer for Bitcoin Cash: blocks, transactions, addresses, the mempool, and mining statistics. This package runs it against your own node and indexer, and patches the published images at start to work with the three Bitcoin Cash nodes their upstream does not support.
+
+- **Upstream repo:** <https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer>
+- **Wrapper repo:** <https://github.com/Start9-Community/bch-explorer-startos>
 
 ---
 
 ## Table of Contents
 
-1. [Image and Container Runtime](#1-image-and-container-runtime)
-2. [Volume and Data Layout](#2-volume-and-data-layout)
-3. [Installation and First-Run Flow](#3-installation-and-first-run-flow)
-4. [Default Networking](#4-default-networking)
-5. [Configuration Management](#5-configuration-management)
-6. [Network Access and Interfaces](#6-network-access-and-interfaces)
-7. [Actions (StartOS UI)](#7-actions-startos-ui)
-8. [Backups and Restore](#8-backups-and-restore)
-9. [Health Checks](#9-health-checks)
-10. [Dependencies](#10-dependencies)
-11. [Default Overrides](#11-default-overrides)
-12. [Limitations and Differences](#12-limitations-and-differences)
-13. [What Is Unchanged from Upstream](#13-what-is-unchanged-from-upstream)
-14. [Contributing](#14-contributing)
-15. [Quick Reference for AI Consumers](#15-quick-reference-for-ai-consumers)
+- [Image and Container Runtime](#image-and-container-runtime)
+- [Volume and Data Layout](#volume-and-data-layout)
+- [File Models](#file-models)
+- [Dependencies](#dependencies)
+- [Network Access and Interfaces](#network-access-and-interfaces)
+- [Installation and First-Run Flow](#installation-and-first-run-flow)
+- [Actions](#actions)
+- [Tasks](#tasks)
+- [Health Checks](#health-checks)
+- [Backups and Restore](#backups-and-restore)
+- [Limitations and Differences](#limitations-and-differences)
+- [Upstream Updates](#upstream-updates)
+- [Quick Reference for AI Consumers](#quick-reference-for-ai-consumers)
 
 ---
 
-## 1. Image and Container Runtime
+## Image and Container Runtime
 
-| Field | Value |
-|---|---|
-| **Frontend image** | `ghcr.io/bitcoincash1/bch-explorer-frontend:3.11.13` |
-| **Backend image** | `ghcr.io/bitcoincash1/bch-explorer-backend:3.11.13` |
-| **Database image** | `mariadb:11.4` |
-| **Architectures** | `x86_64` (all three images; emulate missing arch as x86_64) |
-| **Frontend command** | Upstream entrypoint (nginx + Angular) |
-| **Backend command** | `./start.sh` (Node.js API server) |
-| **Database command** | MariaDB with `--bind-address=127.0.0.1` |
-| **SubContainers** | Three: `api-sub` (backend), `db-sub` (MariaDB), `web-sub` (nginx frontend) |
+Three images: the two halves of the explorer, and a MariaDB sidecar.
 
----
+| Property      | Value                                             |
+| ------------- | ------------------------------------------------- |
+| Images        | The upstream frontend and backend, plus `mariadb` |
+| Architectures | x86_64 natively; **aarch64 by emulation**         |
+| Command       | Each image's own entrypoint                       |
 
-## 2. Volume and Data Layout
+| Subcontainer | Purpose                                     |
+| ------------ | ------------------------------------------- |
+| `api-sub`    | The backend — attach here for explorer logs |
+| `web-sub`    | The frontend, an nginx-served bundle        |
+| `db-sub`     | MariaDB, private to this service            |
 
-| Volume Name | Mount Point | Purpose |
-|---|---|---|
-| `main` | `/backend/cache` (subpath: `/cache`) | Backend cache files |
-| `db` | `/var/lib/mysql` | MariaDB database files |
+**The explorer images are published for x86_64 only**, so on ARM they run under emulation. That is slower, and it is why they cannot simply be rebuilt here.
 
-**StartOS-managed files:**
+**Because they cannot be rebuilt, they are patched at start.** The backend is a published artifact, so each fix is applied in place before its daemon launches, and every patch is written to no-op when its pattern is absent — so a fix upstream has since made unnecessary costs nothing rather than breaking the start.
 
-| File / Directory | Managed By | Purpose |
-|---|---|---|
-| `store.json` | StartOS SDK file model | Package state: selected node, network, indexer, DB password |
-| `/backend/cache/` | Backend | Cached API responses (tmp-cache.json and related) |
+What those patches cover is worth knowing, because it is the reason this package exists at all: the upstream explorer targets one node implementation, and the other two answer differently. The patches reconcile the RPC dialect — a block's transactions under a different key, a missing transaction count, statistics and chain-tip calls that are simply unimplemented, a two-argument raw-transaction call, an address validation that omits the field the Electrum path needs, and mempool entries missing the fields the frontend renders.
 
-**Dependency volume mounted at runtime (read-only):**
+**The backend also refuses to start while its PID file exists**, so its command removes a stale one and kills any process still holding the port before launching — otherwise one crash wedges every restart after it.
 
-| Mount Point | Source | Purpose |
-|---|---|---|
-| `/mnt/node` | Selected node package `main` volume | Read `store.json` for node RPC credentials |
+## Volume and Data Layout
 
----
+Two volumes, plus a read-only view of the selected node's.
 
-## 3. Installation and First-Run Flow
+| Volume                 | Mount Point      | Purpose                                     |
+| ---------------------- | ---------------- | ------------------------------------------- |
+| `main`                 | `/backend/cache` | The backend's cache, at a subpath           |
+| `db`                   | `/var/lib/mysql` | MariaDB's data — **at a per-chain subpath** |
+| The node's `main` (ro) | `/mnt/node`      | The node's own store                        |
 
-1. StartOS pulls all three images (frontend, backend, MariaDB).
-2. Seed files are written: `store.json` with defaults (node: BCHN, network: mainnet, indexer: Fulcrum).
-3. On first start, the backend SubContainer reads node RPC credentials from `/mnt/node/store.json`.
-4. Cache directory permissions are fixed (`chmod 777 /backend/cache`) to allow the non-root backend process to write.
-5. BCHD compatibility shims are applied at runtime via Node.js patches to the backend JavaScript (compensates for BCHD API differences from BCHN).
-6. A frontend shim serves mining-pool SVGs from the frontend image (and strips any leftover nginx proxy to `bchexplorer.cash`, which now returns 403).
-7. A hex2ascii display patch is applied to Angular chunk files to strip control characters from coinbase/OP_RETURN text.
-8. MariaDB starts and becomes ready on port 3306.
-9. The backend API starts, connects to MariaDB and the BCH node, and begins populating the database. The API is ready when port 8999 opens.
-10. nginx frontend starts, proxying API requests to port 8999. The web UI is ready when port 8080 opens.
-11. Fulcrum BCH provides Electrum data (address lookups, transaction history) continuously.
+**Each chain gets its own database directory.** The `db` volume is mounted at a subpath named for the chain, so switching chains does not mix one chain's indexed data into another's — and switching back finds the earlier index still there.
 
-> **Note on outbound access:** The BCH/USD price chart still needs outbound clearnet (Services → BCH Explorer → Outbound Proxy). Pool logos are served from the frontend image.
+**The node's volume is mounted for its store, not for chain data.** The explorer never reads the chain from disk — what it needs from that mount is which chain the node is on and, for two of the three nodes, the RPC credentials published there.
 
----
+**The cache directory is made world-writable at start**, because the mounted subpath arrives with restrictive ownership and the backend runs unprivileged. It is visible only inside that container.
 
-## 4. Default Networking
+## File Models
 
-| Transport | Default | Inbound | How to Change |
-|---|---|---|---|
-| **Clearnet (IPv4/IPv6)** | Enabled — web UI port exposed by StartOS | Enabled for browser access | Managed by StartOS |
-| **Tor** | Available via StartOS routing | Available if StartOS assigns `.onion` address | Automatic via StartOS |
-| **MariaDB** | Bound to `127.0.0.1` only | Not exposed externally | Internal only by design |
+One model, holding what StartOS contributes.
 
----
+| File         | Format | Modelled                | Written by       |
+| ------------ | ------ | ----------------------- | ---------------- |
+| `store.json` | JSON   | Yes — `FileHelper.json` | Init and actions |
 
-## 5. Configuration Management
+It holds the database password, the node selection and whether it has been confirmed, and the Flowee credential.
 
-| Group | Settings Covered |
-|---|---|
-| **Select Node Backend** | Choose which BCH full node provides RPC data: BCHN, BCHD, Flowee, Knuth |
-| **Select Network** | Choose which BCH network to serve: mainnet, testnet4, chipnet, scalenet |
-| **Select Indexer** | Choose Electrum indexer for address lookups (currently: Fulcrum BCH only) |
+Everything the explorer itself reads is **passed as environment**, composed at start — the chain, the node's address and credentials, the indexer's address, and the frontend's per-chain switches.
 
----
+**One backend serves one chain.** The frontend's per-chain switches are set so that only the selected chain is enabled and the interface is pinned to it, rather than offering a chain selector whose other entries would have no backend behind them.
 
-## 6. Network Access and Interfaces
+## Dependencies
 
-| Interface | Port | Protocol | Purpose | Condition |
-|---|---|---|---|---|
-| Web UI | 8080 | HTTP | BCH Explorer web interface — blocks, transactions, addresses | Always |
-| Backend API | 8999 | HTTP | Internal API (frontend → backend); not externally exposed | Internal |
-| MariaDB | 3306 | TCP | Internal database; bound to 127.0.0.1 only | Internal |
-| Electrum (Fulcrum) | 50001 | TCP | Address lookup via Fulcrum BCH (external dependency) | Always |
+Five declared: an indexer that is always required, and four nodes of which **exactly one** is active.
 
----
+| Dependency          | Required         | Health checks required                      | Why                         |
+| ------------------- | ---------------- | ------------------------------------------- | --------------------------- |
+| Fulcrum BCH         | **Yes**          | `primary`, `sync-progress`                  | Address and history lookups |
+| Bitcoin Cash Node   | Only if selected | `primary`, `sync-progress`                  | Blocks and transactions     |
+| Bitcoin Cash Daemon | Only if selected | `primary`, `sync-progress`, `rpc-plaintext` | The same                    |
+| Flowee the Hub      | Only if selected | `primary`, `sync-progress`                  | The same                    |
+| Knuth               | Only if selected | `primary`, `sync-progress`                  | The same                    |
 
-## 7. Actions (StartOS UI)
+**Unlike its sibling mining packages, these are gated on being synced.** An explorer showing a partial chain is showing wrong answers, not late ones.
 
-### Configuration
+**Bitcoin Cash Daemon needs a third check**, because it serves RPC over its own TLS which the explorer backend cannot speak — so it is dialed through that package's plaintext proxy, and the proxy is a binding that has to be up in its own right.
 
-| Action ID | Name | Description |
-|---|---|---|
-| `select-node` | Select Node Backend | Choose which installed BCH node package provides blockchain RPC data |
-| `select-network` | Select Network | Choose which BCH network the explorer serves (mainnet / testnet4 / chipnet / scalenet) |
-| `select-indexer` | Select Indexer | Choose the Electrum indexer for address lookups (currently Fulcrum BCH only) |
+**The node needs configuring, and the package asks for it.** The explorer looks up arbitrary transactions, which requires a full transaction index — and on one node an unpruned chain as well. So selecting a node raises a `critical` task **on that node**, pre-filled and locked to exactly those settings, recurring rather than one-shot so turning the index off later brings the prompt back. On Knuth the task turns JSON-RPC on and sets the full database mode instead, since Knuth serves RPC only when enabled and keeps transaction data only in that mode.
 
-### Maintenance
+**Flowee is handled differently**, and deliberately: it keeps only a hash of each RPC password and cannot report its current input, so a recurring "does the input match" task would re-appear forever no matter how many times it was answered. Its credential task is raised once by the node-selection action instead.
 
-| Action                  | Purpose                                            | Visibility | Availability | Input | Output |
-| ----------------------- | -------------------------------------------------- | ---------- | ------------ | ----- | ------ |
-| **Repair MariaDB**      | Delete `tc.log` and restart after a crash-loop     | Enabled    | Any status   | None  | Count of removed logs |
+Switching nodes clears the tasks belonging to the ones you left.
 
-**Repair MariaDB** mounts the `db` volume and deletes every `tc.log` (the
-transaction-coordinator log). MariaDB refuses to start when that file has a bad
-magic header after an unclean shutdown or a full disk. A StartOS Rebuild remakes
-the container but leaves the file on the volume. Indexed explorer data is kept.
+## Network Access and Interfaces
 
----
+One interface.
 
-## 8. Backups and Restore
+| Interface | Id    | Type | Port | Description  |
+| --------- | ----- | ---- | ---- | ------------ |
+| Web UI    | `web` | ui   | 8080 | The explorer |
 
-**What IS backed up:**
-- `store.json` — selected node, network, indexer, DB password
-- MariaDB `explorer` database — all indexed block, transaction, and mining statistics data (via `mysqldump`)
-- `main` volume cache files
+Bound on the `main` MultiHost over HTTP and not masked.
 
-**What is NOT backed up:**
-- Nothing additional is excluded beyond what `sdk.Backups.withMysqlDump` handles
+**There is no login**, and the content is public blockchain data. The backend and the database are internal to the service and are not exported — the frontend reaches the backend over the service's own loopback, and MariaDB is bound to loopback explicitly.
 
-The MariaDB dump is performed using `healthcheck.sh --connect --innodb_initialized` to ensure the database is ready before dumping. On restore, the database is re-imported automatically.
+## Installation and First-Run Flow
 
----
+Install generates the database password and raises a `critical` task: choose the node.
 
-## 9. Health Checks
+Confirming that choice raises the second task, on the node itself, asking it to enable the transaction index. **Answering it restarts the node**, and on a node that was not already indexing, the index has to be built before the explorer can answer arbitrary lookups.
 
-| Check | Method | Key Messages |
-|---|---|---|
-| **Database** (daemon ready) | `sdk.healthCheck.checkPortListening` on port 3306 | `Database is ready` / `Database is starting...` |
-| **API** (daemon ready) | `sdk.healthCheck.checkPortListening` on port 8999 | `BCH Explorer API is ready` / `BCH Explorer API is starting...` |
-| **Web UI** (daemon ready) | `sdk.healthCheck.checkPortListening` on port 8080 | `BCH Explorer is ready` / `BCH Explorer web UI is starting...` |
+Fulcrum BCH must also be installed and synced. Until it is, the explorer runs but address and transaction history are unavailable — which is reported in the logs rather than by refusing to start.
 
----
+**A node that is not yet reachable is not fatal either.** The explorer starts with its node address unset rather than dialing something that cannot answer, and the reactive read connects it the moment the node appears.
 
-## 10. Dependencies
+**A chain the explorer has no frontend for is fatal**, and that is the one case where the start does throw: there is nothing sensible to render.
 
-### Bitcoin Cash Node — BCHN (optional)
+## Actions
 
-| Field | Value |
-|---|---|
-| **Package ID** | `bitcoincashd` |
-| **Version constraint** | Any |
-| **Required state** | Running and fully synced |
-| **Mounted volumes** | `main` volume mounted read-only at `/mnt/node` for credential discovery |
-| **Purpose** | Provides JSON-RPC for block and transaction data; supports all four networks (mainnet, testnet4, chipnet, scalenet) |
+Two actions.
 
-### Bitcoin Cash Daemon — BCHD (optional)
+### Select Node Backend
 
-| Field | Value |
-|---|---|
-| **Package ID** | `bchd` |
-| **Version constraint** | Any |
-| **Required state** | Running and fully synced |
-| **Mounted volumes** | `main` volume mounted read-only at `/mnt/node` for credential discovery |
-| **Purpose** | Go BCH full node alternative; explorer uses plaintext proxy port 8334 for BCHD (BCHD RPC requires TLS; backend has no TLS support for `CORE_RPC`); mainnet only |
+Chooses which of the four Bitcoin Cash nodes the explorer reads from.
 
-### Flowee the Hub (optional)
+- **What it changes:** the selection, and through it the dependency, the mount, the RPC address, and which node-side task is raised.
+- **Cost:** the explorer restarts.
+- **Choosing Flowee raises its credential task** from here rather than from the dependency declaration — see [Dependencies](#dependencies).
 
-| Field | Value |
-|---|---|
-| **Package ID** | `flowee` |
-| **Version constraint** | Any |
-| **Required state** | Running and fully synced |
-| **Mounted volumes** | `main` volume mounted read-only at `/mnt/node` for credential discovery |
-| **Purpose** | Fast BCH validator alternative for explorer RPC; mainnet only |
+### Repair MariaDB
 
-### Fulcrum BCH (required)
+Deletes MariaDB's transaction-coordinator log and restarts.
 
-| Field | Value |
-|---|---|
-| **Package ID** | `fulcrum-bch` |
-| **Version constraint** | Any |
-| **Required state** | Running and fully indexed |
-| **Mounted volumes** | None (accessed via `fulcrum-bch.startos:50001` over the network) |
-| **Purpose** | Required Electrum indexer for all address lookups and transaction history. Without Fulcrum, address search and history features are unavailable. |
+- **For one specific failure**: a database that crash-loops after an unclean shutdown or a full disk, reporting a bad magic header in that log.
+- **Indexed explorer data is kept.** Only the coordinator log is removed.
+- **A StartOS rebuild does not remove that file**, which is why this action exists at all.
+- **Runnable at any status.**
 
-**At least one of BCHN, BCHD, or Flowee is required, plus Fulcrum BCH.**
+## Tasks
+
+Up to three, and two of them land on another package.
+
+| Task                | Raised on       | Severity   | Raised when                   | Cleared when              |
+| ------------------- | --------------- | ---------- | ----------------------------- | ------------------------- |
+| Select Node Backend | This package    | `critical` | Install                       | The action runs           |
+| Auto-Configure      | The chosen node | `critical` | Its required settings are off | Its configuration matches |
+| Register credential | `flowee`        | `critical` | Flowee is selected            | Flowee registers it       |
+
+The node-side configuration task is **recurring**: it re-raises whenever the node's settings stop matching, so turning the transaction index off later is noticed rather than silently breaking lookups.
+
+## Health Checks
+
+Three checks, one per daemon.
+
+| Check | Displayed as | Method                                    |
+| ----- | ------------ | ----------------------------------------- |
+| `db`  | "Database"   | The database port is listening            |
+| `api` | "API"        | The backend's port, then the node's chain |
+| `web` | "Web UI"     | The frontend's port is listening          |
+
+The chain runs in order — the frontend waits for the backend, which waits for the database — so a failure at the bottom shows as the layers above never starting.
+
+**The API check does double duty, and the second job is the interesting one.** Once the backend is up, each poll re-reads which chain the node is on and restarts the service if it has moved. That check is the only thing that can notice: the node's chain lives in a file, which is not a reactive source, and on two of the three nodes the RPC port does not move with the chain either — so the address gives no signal.
+
+## Backups and Restore
+
+**The index is not backed up. Only the settings are.**
+
+Everything in the explorer's database is derived from the node and the indexer, and it is the entire bulk of what this service stores — so the `db` volume is left out of the backup altogether and a restored install rebuilds it. That is the same trade Fulcrum and electrs make with their own indexes.
+
+What is kept is `store.json`, on the `main` volume: the node selection, and **the credential registered on Flowee**. That credential is the reason this backup is not empty — it is minted here and registered on the Flowee side, so losing it would mean answering Flowee's registration task again. The backend's own cache is excluded alongside the index, being derived too.
+
+**A restored explorer comes back configured and immediately begins re-indexing**, exactly as a fresh install does. Backups are correspondingly small and quick.
+
+## Limitations and Differences
+
+1. **x86_64 is native; ARM is emulated.** The upstream images are published for one architecture only.
+2. **The images are patched at start**, because they cannot be rebuilt here. Each patch no-ops if upstream has fixed the underlying difference.
+3. **One chain at a time.** The frontend is pinned to the node's chain and the other selectors are disabled.
+4. **Regtest is not supported** — the explorer has no frontend for it, and the start fails rather than rendering nothing.
+5. **A full transaction index is required on the node**, and on one of them an unpruned chain as well.
+6. **Both the node and the indexer must be synced**, not merely running.
+7. **No authentication.** The explorer is public data, but it is also a window onto which chain you run.
+8. **Some frontend content is fetched from upstream's own service**, including historical prices and the services endpoint baked into the image's configuration.
+9. **The index is not backed up**, by design — a restore re-indexes from the node.
 
 ---
 
-## 11. Default Overrides
+## Upstream Updates
 
-| Setting | Upstream Default | StartOS Value | Reason |
-|---|---|---|---|
-| `CORE_RPC_PORT` for BCHD | 8332 | 8334 | BCHD's RPC is TLS-only; backend has no TLS support; stunnel plaintext proxy on 8334 is used |
-| Mining pool logo assets | Proxied from `bchexplorer.cash` | Served from local `/resources/mining-pools/` | The Melroy image now ships the SVGs; the old proxy returns 403 |
-| `tx_count` column type | `smallint unsigned` (max 65535) | `int unsigned` via runtime ALTER | BCH blocks can exceed 65535 transactions (e.g., block 840002 with 72,174 txs); causes INSERT errors otherwise |
-| BCHD `getblock` verbosity response | Returns `rawtx` field | Shimmed: `tx = tx || rawtx || []` | BCHD uses `rawtx` instead of `tx` in verbosity=2 responses |
-| BCHD `getblockstats` | Not implemented (-32601) | Shimmed: falls back to local stats | Explorer calls `getblockstats` for block statistics; BCHD does not implement it |
-| hex2ascii control characters | Strips `\0` only | Also strips `\x00-\x1F\x7F-\x9F` | Coinbase and OP_RETURN payloads contain raw control bytes that render as gibberish glyphs |
-| `ITEMS_PER_PAGE` | Varies upstream | `10` | Conservative default for StartOS hardware |
-| `MINING_DASHBOARD` | Varies | `true` | Enables mining statistics dashboard |
-| `AUDIT` | Varies | `true` | Enables block audit feature |
+When upstream publishes a release, its pipeline sends this repository a `repository_dispatch`, which runs `check-upstream.yml` (it can also be run by hand with a tag). The workflow copies that release's frontend and backend images from Melroy's registry to GHCR, where the manifest pins them, then `scripts/auto-bump.sh` sets `startos/versions/current.ts` to `<upstream>:0`, resets `ALLOW_DOWNGRADE` to `false`, updates the image tags in the manifest, and opens a pull request from `auto-bump/v<tag>`. A tag older than the packaged version is refused. Nothing reaches `master` until that PR is reviewed and merged; merging it is what releases the new version. Package-only fixes bump the revision after the colon by hand in their own PR.
 
----
-
-## 12. Limitations and Differences
-
-1. **BCHD is mainnet only** for this explorer. BCHD does not support testnet4, chipnet, or scalenet.
-2. **Flowee is mainnet only** for this explorer (Flowee currently supports mainnet only).
-3. **Fulcrum BCH is always required** — it is the only supported Electrum indexer. The "Select Indexer" action exists for future extensibility but currently only offers Fulcrum.
-4. Pool logos come from the frontend image. Unnamed chipnet miners still show the Unknown icon (no matching coinbase tag). The BCH/USD price chart still needs an outbound clearnet proxy.
-5. Several BCHD API compatibility shims are applied at runtime by patching compiled JavaScript in the backend image. These shims compensate for BCHD API differences from the BCHN-compatible upstream. See `main.ts` for full detail.
-6. The database `tx_count` column is widened from `smallint` to `int` at runtime via ALTER TABLE to support large BCH blocks. This ALTER is idempotent and safe to repeat.
-7. All three containers (frontend, backend, MariaDB) are `x86_64` only. The `emulateMissingAs: x86_64` setting allows the package to install on aarch64/riscv64 hardware via emulation, with a performance penalty.
-
----
-
-## 13. What Is Unchanged from Upstream
-
-- All upstream Mempool/mempool-based BCH explorer functionality (block explorer, transaction lookup, address history, mempool dashboard)
-- MariaDB schema (with the `tx_count` column widening applied)
-- Electrum protocol client behavior for address lookups
-- nginx frontend proxy configuration (with mining-pool asset proxy injected)
-- Angular frontend functionality (with hex2ascii display fix applied)
-
----
-
-## 14. Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md)
-
----
-
-## 15. Quick Reference for AI Consumers
+## Quick Reference for AI Consumers
 
 ```yaml
 package_id: bch-explorer
-title: BCH Explorer
-license: MIT
-upstream_repo: https://gitlab.melroy.org/bitcoincash/bitcoin-cash-explorer
-package_repo: https://github.com/BitcoinCash1/bch-explorer-startos
-images:
-  frontend:
-    source: ghcr.io/bitcoincash1/bch-explorer-frontend:3.11.13
-    arch: [x86_64]
-  backend:
-    source: ghcr.io/bitcoincash1/bch-explorer-backend:3.11.13
-    arch: [x86_64]
-  db:
-    source: mariadb:11.4
-    arch: [x86_64, aarch64]
+image: ghcr.io/bitcoincash1/bch-explorer-frontend # plus -backend and mariadb
+architectures:
+  - x86_64 # aarch64 via emulateMissingAs
+subcontainers:
+  - api-sub # backend; patched in place at start
+  - web-sub # frontend, nginx
+  - db-sub # MariaDB, bound to 127.0.0.1
 volumes:
-  - name: main
-    mountpoint: /backend/cache
-    purpose: backend cache files
-  - name: db
-    mountpoint: /var/lib/mysql
-    purpose: MariaDB database
-ports:
-  - interface: web
-    port: 8080
-    protocol: http
-    purpose: BCH Explorer web interface
-    condition: always
-  - name: backend-api (internal)
-    port: 8999
-    protocol: http
-    purpose: backend API — internal only
-    condition: internal
-  - name: mariadb (internal)
-    port: 3306
-    protocol: tcp
-    purpose: database — internal, bound to 127.0.0.1
-    condition: internal
+  main: /backend/cache # mounted at a subpath; chmod 777 at start for the unprivileged backend
+  db: /var/lib/mysql
+  # the selected node's main volume is read-only at /mnt/node — for its store, not chain data
+file_models:
+  - store.json # dbPassword, nodePackageId, nodeConfirmed, flowee credentials
+startos_managed_env_vars:
+  - EXPLORER_BACKEND
+  - EXPLORER_NETWORK
+  - CORE_RPC_* # host, port and credentials; omitted while the node is unresolved
+  - ELECTRUM_* # Fulcrum BCH's bridge address
+  - MYSQL_* / MARIADB_*
+  - '*_ENABLED / ROOT_NETWORK' # frontend chain switches; only the selected chain is on
 dependencies:
-  bitcoincashd:
-    optional: true
-    purpose: BCHN full node — blockchain RPC; supports all networks
-  bchd:
-    optional: true
-    purpose: BCHD full node — mainnet only; uses plaintext proxy port 8334
-  flowee:
-    optional: true
-    purpose: Flowee the Hub — mainnet only alternative
-  fulcrum-bch:
-    optional: false
-    purpose: Required Electrum indexer for address lookups
-networks_supported: [mainnet, testnet4, chipnet, scalenet]
-startos_managed_files:
-  - store.json
+  - fulcrum-bch # REQUIRED always; healthChecks: [primary, sync-progress]
+  - bitcoincashd # only if selected; healthChecks: [primary, sync-progress]
+  - bchd # only if selected; + rpc-plaintext, since the backend can't speak its TLS
+  - flowee # only if selected; healthChecks: [primary, sync-progress]
+  - knuth-bch # only if selected; healthChecks: [primary, sync-progress]
+interfaces:
+  web: { type: ui, port: 8080 } # no authentication; backend and db are internal
 actions:
-  - { id: select-node, name: "Select Node Backend", group: Configuration }
-  - { id: select-network, name: "Select Network", group: Configuration }
-  - { id: select-indexer, name: "Select Indexer", group: Configuration }
-  - { id: repair-mariadb, name: "Repair MariaDB", group: Maintenance }
+  - select-node
+  - repair-mariadb # deletes tc.log only; a StartOS rebuild does not
+tasks:
+  - { action: select-node, severity: critical } # install
+  - { on: <chosen node>, action: autoconfig, severity: critical, once: false } # txindex
+  - { on: flowee, action: create-dependent-credential, severity: critical } # from the action
 health_checks:
-  - { id: db, display: "Database", method: "port 3306 listen check" }
-  - { id: api, display: "API", method: "port 8999 listen check" }
-  - { id: web, display: "Web UI", method: "port 8080 listen check" }
-backup_volumes:
-  - main
-  - db (mysqldump of explorer database)
-backup_excludes: []
+  - db # displayed "Database"
+  - api # displayed "API"; also re-reads the node's chain and restarts on a change
+  - web # displayed "Web UI"
 ```

@@ -1,14 +1,8 @@
-node_modules/
-javascript/
 *.s9pk
-
-# Secrets — never commit (a tool once expanded "~" into a literal "~/" dir)
-~/
-**/~/
-*.key
-*.key.pem
-*.pem
-.startos/
-**/.startos/
-.env
-.env.*
+startos/*.js
+node_modules/
+.DS_Store
+.vscode/
+docker-images
+javascript
+ncc-cache
