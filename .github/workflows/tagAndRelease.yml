@@ -125,7 +125,7 @@ jobs:
           TITLE=$(start-cli s9pk inspect "$FIRST_S9PK" manifest | jq -r '.title')
           VERSION=$(start-cli s9pk inspect "$FIRST_S9PK" manifest | jq -r '.version')
           UPSTREAM_TAG="${VERSION%%:*}"
-          RELEASE_NOTES=$(start-cli s9pk inspect "$FIRST_S9PK" manifest | jq -r '.releaseNotes // "No release notes provided."')
+          RELEASE_NOTES=$(start-cli s9pk inspect "$FIRST_S9PK" manifest | jq -r '.releaseNotes // "No release notes provided." | if type == "object" then (.en_US // first(.[]) // "No release notes provided.") else . end')
           {
             echo "## What's Changed"
             echo ""
