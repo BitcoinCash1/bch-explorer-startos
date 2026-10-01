@@ -110,6 +110,10 @@ jobs:
           pull_one frontend
           pull_one backend
 
+      - name: Install dependencies
+        run: npm ci
+        shell: bash
+
       - name: Build service packages
         run: |
           RUST_LOG=debug RUST_BACKTRACE=1 make
