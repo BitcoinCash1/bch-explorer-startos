@@ -1,0 +1,74 @@
+name: Check Upstream
+
+# A daily guard beside upstream's own repository_dispatch: upstream sends one
+# dispatch per release and never repeats it, so a release whose Tag and Release
+# run fails would otherwise stay missing until the next upstream release.
+# Upstream pushes each release's images to GHCR before it dispatches, so the
+# newest version is the newest tag both explorer images have there. This sends
+# the same upstream-release dispatch when that version is newer than the
+# package, or when the packaged version has no GitHub release.
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: upstream-release-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Compare the package with the newest upstream images
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tags() {
+            local token
+            token=$(curl -fsS "https://ghcr.io/token?scope=repository:bitcoincash1/bch-explorer-$1:pull" | jq -r .token)
+            curl -fsS -H "Authorization: Bearer $token" \
+              "https://ghcr.io/v2/bitcoincash1/bch-explorer-$1/tags/list?n=1000" \
+              | jq -r '.tags[]' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -u
+          }
+          LATEST=$(comm -12 <(tags frontend) <(tags backend) | sort -V | tail -1)
+          CURRENT=$(sed -nE "s/^[[:space:]]*version:[[:space:]]*'([^':]+):.*/\1/p" startos/versions/current.ts | head -1)
+          [ -n "$LATEST" ] && [ -n "$CURRENT" ]
+          echo "Newest upstream images on GHCR: $LATEST; packaged: $CURRENT"
+
+          if [ "$(printf '%s\n%s\n' "$CURRENT" "$LATEST" | sort -V | tail -1)" != "$CURRENT" ]; then
+            TAG="$LATEST"
+            echo "Upstream $LATEST is newer than the package"
+          elif ! gh release view "$CURRENT" >/dev/null 2>&1; then
+            TAG="$CURRENT"
+            echo "The packaged version $CURRENT has no release"
+          else
+            echo "Up to date and released; nothing to do"
+            exit 0
+          fi
+
+          # A run already under way (upstream's own dispatch, or yesterday's)
+          # would be cancelled by a second one, so leave it to finish.
+          BUSY=$(gh run list --workflow tagAndRelease.yml --limit 20 --json status \
+            --jq '[.[] | select(.status != "completed")] | length')
+          if [ "$BUSY" != "0" ]; then
+            echo "Tag and Release is already running; checking again tomorrow"
+            exit 0
+          fi
+
+          gh api "repos/${{ github.repository }}/dispatches" \
+            -f event_type=upstream-release -f "client_payload[tag]=$TAG"
+          echo "Sent upstream-release for $TAG"
+        shell: bash
