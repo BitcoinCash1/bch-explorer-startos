@@ -8,9 +8,9 @@ import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 const ALLOW_DOWNGRADE = false
 
 export const current = VersionInfo.of({
-  version: '3.18.0:0',
+  version: '3.18.1:0',
   releaseNotes: {
-    en_US: 'Updates BCH Explorer to upstream 3.18.0.',
+    en_US: 'Updates BCH Explorer to upstream 3.18.1.',
   },
   migrations: {
     up: async ({ effects }) => {},
